@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "818321849874",
+    "project_id": "smart-buy-online",
+    "storage_bucket": "smart-buy-online.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:818321849874:android:2e16c063e3a151f7fe62cb",
+        "android_client_info": {
+          "package_name": "com.smartbuyonline.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCL8MKsINk1pj8CGm50YIJLduLPquheA6g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
