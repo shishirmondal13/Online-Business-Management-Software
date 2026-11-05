@@ -1,10 +1,7 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:open_file/open_file.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -640,44 +637,22 @@ class ReceiptService {
     );
   }
 
-  /// Saves the PDF directly to Downloads/Documents and opens the file.
-  Future<File?> downloadPdf(Sale sale, {BuildContext? context, List<Payment> payments = const []}) async {
+  /// Downloads or saves the PDF.
+  /// On web: opens browser print dialog (Save as PDF supported).
+  /// On native: opens system print/save dialog.
+  Future<void> downloadPdf(Sale sale, {BuildContext? context, List<Payment> payments = const []}) async {
     try {
       final receiptId =
           sale.id.length >= 8 ? sale.id.substring(0, 8) : sale.id;
-      final pdfBytes = await buildPdfBytes(sale, payments: payments);
-
-      Directory? directory;
-      try {
-        directory = await getDownloadsDirectory();
-      } catch (_) {
-        directory = null;
-      }
-      directory ??= await getApplicationDocumentsDirectory();
-
       final timeStamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       final fileName = 'Invoice_${receiptId}_$timeStamp.pdf';
-      final file = File('${directory.path}/$fileName');
+      final pdfBytes = await buildPdfBytes(sale, payments: payments);
 
-      await file.writeAsBytes(pdfBytes, flush: true);
-
-      // Open the saved PDF file directly
-      await OpenFile.open(file.path);
-
-      if (context != null && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Invoice saved: $fileName'),
-            backgroundColor: AppColors.success,
-            action: SnackBarAction(
-              label: 'Open',
-              textColor: Colors.white,
-              onPressed: () => OpenFile.open(file.path),
-            ),
-          ),
-        );
-      }
-      return file;
+      // Works on web (browser print → Save as PDF) and native (system print dialog)
+      await Printing.layoutPdf(
+        onLayout: (_) async => pdfBytes,
+        name: fileName,
+      );
     } catch (e) {
       if (context != null && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -687,7 +662,6 @@ class ReceiptService {
           ),
         );
       }
-      return null;
     }
   }
 
