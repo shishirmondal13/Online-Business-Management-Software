@@ -87,6 +87,7 @@ Mobile phone .csv
 graphify-out/
 scratch/
 .firebase/
+push_to_github.bat
 
 # -------------------------------------------------------------------------
 # Ephemeral Build Folders
