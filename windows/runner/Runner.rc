@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.ibuzz" "\0"
-            VALUE "FileDescription", "ibuzz_bd_management" "\0"
+            VALUE "CompanyName", "Smart Buy Online" "\0"
+            VALUE "FileDescription", "Smart Buy Online" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "ibuzz_bd_management" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2025 com.ibuzz. All rights reserved." "\0"
+            VALUE "InternalName", "smart_buy_online" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Smart Buy Online. All rights reserved." "\0"
             VALUE "OriginalFilename", "ibuzz_bd_management.exe" "\0"
-            VALUE "ProductName", "ibuzz_bd_management" "\0"
+            VALUE "ProductName", "Smart Buy Online" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

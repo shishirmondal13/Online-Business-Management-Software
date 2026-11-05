@@ -13,12 +13,12 @@ final mobileStockListProvider = StreamProvider<List<MobileStock>>((ref) {
 
   return FirebaseFirestore.instance
       .collection(FirestoreConstants.mobileStock)
-      .orderBy('date', descending: true)
       .snapshots()
       .map((snapshot) {
         final list = snapshot.docs
             .map((doc) => MobileStock.fromFirestore(doc))
             .toList();
+        list.sort((a, b) => b.date.compareTo(a.date));
         return list;
       });
 });
@@ -31,6 +31,17 @@ final filteredMobileStockProvider =
       return stockList.whenData((list) {
         if (status == null || status.isEmpty) return list;
         return list.where((item) => item.status == status).toList();
+      });
+    });
+
+/// Returned mobile stock list (items returned from customer)
+final returnedMobileStockProvider =
+    Provider<AsyncValue<List<MobileStock>>>((ref) {
+      final stockList = ref.watch(mobileStockListProvider);
+      return stockList.whenData((list) {
+        return list
+            .where((item) => item.isReturned || item.returnCount > 0)
+            .toList();
       });
     });
 
@@ -79,6 +90,7 @@ class MobileStockService {
     // Check IMEI uniqueness for this user
     final existing = await _firestore
         .collection(FirestoreConstants.mobileStock)
+        .where(FirestoreConstants.userId, isEqualTo: stock.userId)
         .where(FirestoreConstants.imeiNumber, isEqualTo: stock.imeiNumber)
         .limit(1)
         .get();
@@ -102,6 +114,7 @@ class MobileStockService {
     // Check IMEI uniqueness (excluding current document) for this user
     final existing = await _firestore
         .collection(FirestoreConstants.mobileStock)
+        .where(FirestoreConstants.userId, isEqualTo: stock.userId)
         .where(FirestoreConstants.imeiNumber, isEqualTo: stock.imeiNumber)
         .limit(2)
         .get();
@@ -121,13 +134,19 @@ class MobileStockService {
 
   /// Delete mobile stock
   Future<void> deleteMobileStock(String id) async {
+    final references = await _firestore
+        .collection(FirestoreConstants.sales)
+        .where(FirestoreConstants.productId, isEqualTo: id)
+        .limit(1)
+        .get();
+    if (references.docs.isNotEmpty) {
+      throw StateError('Cannot delete stock referenced by a sale.');
+    }
     await _firestore
         .collection(FirestoreConstants.mobileStock)
         .doc(id)
         .delete();
   }
-
-
 
   /// Mark as sold
   Future<void> markAsSold(String id, double? finalSellingPrice) async {
@@ -168,6 +187,7 @@ class MobileStockService {
   }) async {
     final query = await _firestore
         .collection(FirestoreConstants.mobileStock)
+        .where(FirestoreConstants.userId, isEqualTo: userId)
         .where(FirestoreConstants.imeiNumber, isEqualTo: imei)
         .limit(1)
         .get();

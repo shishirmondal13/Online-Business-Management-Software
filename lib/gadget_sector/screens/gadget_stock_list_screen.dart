@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import '../../shared/l10n/app_localizations.dart';
@@ -11,6 +11,8 @@ import '../../shared/utils/calculations.dart';
 import '../providers/gadget_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'add_edit_gadget_screen.dart';
+import '../../returns/screens/damage_product_dialog.dart';
+import '../../returns/screens/damage_history_screen.dart';
 
 /// Gadget stock list screen with table view
 class GadgetStockListScreen extends ConsumerStatefulWidget {
@@ -48,7 +50,34 @@ class _GadgetStockListScreenState extends ConsumerState<GadgetStockListScreen> {
         title: Text(l10n.gadgetStock),
         actions: [
           IconButton(
+            icon: const Icon(Icons.history_rounded),
+            tooltip: 'Damage History',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DamageHistoryScreen(initialSector: 'gadget'),
+                ),
+              );
+            },
+          ),
+          if (canEdit)
+            IconButton(
+              icon: const Icon(Icons.report_problem_outlined),
+              tooltip: 'Record Damaged Gadget',
+              onPressed: () async {
+                final changed = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => const DamageProductDialog(productType: 'gadget'),
+                );
+                if (changed == true) {
+                  ref.invalidate(gadgetStockListProvider);
+                }
+              },
+            ),
+          IconButton(
             icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
             onPressed: () {
               HapticFeedback.mediumImpact();
               ref.invalidate(gadgetStockListProvider);
@@ -210,6 +239,47 @@ class _GadgetStockListScreenState extends ConsumerState<GadgetStockListScreen> {
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
+                                if (stock.isReturned ||
+                                    stock.returnedQuantity > 0) ...[
+                                  const SizedBox(height: 3),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.warning.withValues(
+                                        alpha: 0.15,
+                                      ),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: AppColors.warning.withValues(
+                                          alpha: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.assignment_return_outlined,
+                                          size: 11,
+                                          color: AppColors.warning,
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          stock.returnLabel,
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.warning,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                ],
                                 Text(
                                   stock.productCode,
                                   style: Theme.of(context).textTheme.bodySmall
@@ -221,7 +291,7 @@ class _GadgetStockListScreenState extends ConsumerState<GadgetStockListScreen> {
                               ],
                             ),
                             Text(
-                              '${stock.quantity}',
+                              '${stock.quantity} (damaged: ${stock.damagedQuantity})',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                               ),
@@ -273,6 +343,35 @@ class _GadgetStockListScreenState extends ConsumerState<GadgetStockListScreen> {
                                       );
                                     },
                                   ),
+                                  if (stock.quantity > 0)
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.report_problem_outlined,
+                                        size: 16,
+                                      ),
+                                      color: AppColors.error,
+                                      tooltip: 'Mark damaged',
+                                      constraints: const BoxConstraints(),
+                                      padding: const EdgeInsets.all(4),
+                                      onPressed: () async {
+                                        final changed = await showDialog<bool>(
+                                          context: context,
+                                          builder: (_) => DamageProductDialog(
+                                            productType: 'gadget',
+                                            productId: stock.id,
+                                            productName: stock.productName,
+                                            identifier: stock.productCode,
+                                            unitCost: stock.productCost,
+                                            maxQuantity: stock.quantity,
+                                          ),
+                                        );
+                                        if (changed == true) {
+                                          ref.invalidate(
+                                            gadgetStockListProvider,
+                                          );
+                                        }
+                                      },
+                                    ),
                                 ],
                               ],
                             ),

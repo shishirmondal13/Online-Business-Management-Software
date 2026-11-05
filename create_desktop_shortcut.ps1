@@ -19,14 +19,19 @@ if (-not (Test-Path $targetPath)) {
 
 Write-Host "Creating Desktop shortcut..."
 
+# Clean up old shortcut if present
+if (Test-Path "$DesktopPath\I-Buzz BD Management.lnk") {
+    Remove-Item "$DesktopPath\I-Buzz BD Management.lnk" -Force -ErrorAction SilentlyContinue
+}
+
 # Create WScript Shell COM Object
 $WshShell = New-Object -ComObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut("$DesktopPath\I-Buzz BD Management.lnk")
+$Shortcut = $WshShell.CreateShortcut("$DesktopPath\Smart Buy Online.lnk")
 $Shortcut.TargetPath = $targetPath
 $Shortcut.WorkingDirectory = $workingDir
-$Shortcut.Description = "I-Buzz BD Management System"
+$Shortcut.Description = "Smart Buy Online - Mobile & Gadget Management System"
 $Shortcut.IconLocation = "$targetPath,0"
 $Shortcut.Save()
 
-Write-Host "✅ Shortcut created successfully on your Desktop as 'I-Buzz BD Management'!"
-Write-Host "Path: $DesktopPath\I-Buzz BD Management.lnk"
+Write-Host "✅ Shortcut created successfully on your Desktop as 'Smart Buy Online'!"
+Write-Host "Path: $DesktopPath\Smart Buy Online.lnk"

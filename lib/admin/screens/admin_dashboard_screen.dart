@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/constants/app_colors.dart';
 import '../../auth/models/user_model.dart';
 import '../providers/admin_provider.dart';
+import 'bulk_import_screen.dart';
 
 class AdminDashboardScreen extends ConsumerWidget {
   const AdminDashboardScreen({super.key});
@@ -25,11 +26,37 @@ class AdminDashboardScreen extends ConsumerWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
+        actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.refresh_rounded,
+              color: AppColors.primary,
+            ),
+            tooltip: 'Refresh Users',
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              ref.invalidate(allUsersProvider);
+            },
+          ),
+        ],
       ),
       body: usersAsync.when(
         data: (users) => _buildContent(context, ref, users),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+        error: (err, stack) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Error: $err'),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () => ref.invalidate(allUsersProvider),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -45,6 +72,8 @@ class AdminDashboardScreen extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildSummarySection(users),
+          const SizedBox(height: 24),
+          _buildBulkImportCard(context),
           const SizedBox(height: 32),
           Text(
             'User Management',
@@ -64,6 +93,99 @@ class AdminDashboardScreen extends ConsumerWidget {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBulkImportCard(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const BulkImportScreen()),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.05),
+              blurRadius: 15,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(
+                Icons.cloud_upload_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Bulk Data Import & Restore',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Upload Excel/CSV bulk records & fix data sync',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const BulkImportScreen()),
+                  );
+                },
+                icon: const Icon(
+                  Icons.open_in_new_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                label: const Text(
+                  'Open Tools',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -162,6 +284,7 @@ class AdminDashboardScreen extends ConsumerWidget {
   }
 
   Widget _buildUserCard(BuildContext context, WidgetRef ref, AppUser user) {
+    final isAdmin = user.isAdmin;
     final isEdit = user.accessLevel == 'edit';
 
     return Container(
@@ -186,7 +309,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  gradient: user.isAdmin
+                  gradient: isAdmin
                       ? AppColors.primaryGradient
                       : LinearGradient(
                           colors: [Colors.grey[200]!, Colors.grey[300]!],
@@ -199,7 +322,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                       ? user.businessName[0].toUpperCase()
                       : '?',
                   style: TextStyle(
-                    color: user.isAdmin ? Colors.white : AppColors.textPrimary,
+                    color: isAdmin ? Colors.white : AppColors.textPrimary,
                     fontWeight: FontWeight.bold,
                     fontSize: 20,
                   ),
@@ -211,7 +334,9 @@ class AdminDashboardScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      user.businessName,
+                      user.businessName.isNotEmpty
+                          ? user.businessName
+                          : 'Smart Buy User',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 17,
@@ -236,15 +361,15 @@ class AdminDashboardScreen extends ConsumerWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: user.isAdmin
+                  color: isAdmin
                       ? AppColors.primary.withValues(alpha: 0.12)
                       : Colors.grey[100],
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  user.role.toUpperCase(),
+                  isAdmin ? 'ADMIN' : user.role.toUpperCase(),
                   style: TextStyle(
-                    color: user.isAdmin
+                    color: isAdmin
                         ? AppColors.primary
                         : AppColors.textSecondary,
                     fontSize: 10,
@@ -259,71 +384,105 @@ class AdminDashboardScreen extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: 20),
             child: Divider(height: 1, thickness: 0.8),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+
+          // IF ADMIN: Show Full Access badge with NO edit/view buttons
+          // IF USER: Show Edit and View toggle buttons
+          if (isAdmin)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.success.withValues(alpha: 0.25),
+                ),
+              ),
+              child: const Row(
                 children: [
-                  const Text(
-                    'PERMISSION',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textHint,
-                      letterSpacing: 1,
-                    ),
+                  Icon(
+                    Icons.verified_user_rounded,
+                    color: AppColors.success,
+                    size: 18,
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: isEdit ? AppColors.success : AppColors.warning,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        isEdit ? 'Full Edit Access' : 'View Only Mode',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: isEdit ? AppColors.success : AppColors.warning,
-                        ),
-                      ),
-                    ],
+                  SizedBox(width: 10),
+                  Text(
+                    'Full Admin Access',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: AppColors.success,
+                    ),
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: AppColors.tableBorder.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
+            )
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildActionButton(
-                      context,
-                      label: 'View',
-                      isSelected: user.accessLevel == 'view',
-                      onTap: () => _updateAccess(ref, user, 'view'),
+                    const Text(
+                      'PERMISSION',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textHint,
+                        letterSpacing: 1,
+                      ),
                     ),
-                    const SizedBox(width: 4),
-                    _buildActionButton(
-                      context,
-                      label: 'Edit',
-                      isSelected: user.accessLevel == 'edit',
-                      onTap: () => _updateAccess(ref, user, 'edit'),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: isEdit ? AppColors.success : AppColors.warning,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isEdit ? 'Full Edit Access' : 'View Only Mode',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: isEdit ? AppColors.success : AppColors.warning,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AppColors.tableBorder.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildActionButton(
+                        context,
+                        label: 'View',
+                        isSelected: user.accessLevel == 'view',
+                        onTap: () => _updateAccess(ref, user, 'view'),
+                      ),
+                      const SizedBox(width: 4),
+                      _buildActionButton(
+                        context,
+                        label: 'Edit',
+                        isSelected: user.accessLevel == 'edit',
+                        onTap: () => _updateAccess(ref, user, 'edit'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );

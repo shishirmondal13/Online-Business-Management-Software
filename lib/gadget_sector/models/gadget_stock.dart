@@ -19,6 +19,12 @@ class GadgetStock extends BaseModel {
   final double sellingPrice;
   final double profit; // Auto-calculated
   final String stockStatus; // 'in_stock', 'low_stock', 'out_of_stock'
+  final int damagedQuantity;
+  final double damageValue;
+  final bool isReturned;
+  final int returnedQuantity;
+  final String returnReason;
+  final DateTime? returnedAt;
 
   const GadgetStock({
     required super.id,
@@ -41,6 +47,12 @@ class GadgetStock extends BaseModel {
     required this.sellingPrice,
     required this.profit,
     required this.stockStatus,
+    this.damagedQuantity = 0,
+    this.damageValue = 0,
+    this.isReturned = false,
+    this.returnedQuantity = 0,
+    this.returnReason = '',
+    this.returnedAt,
   });
 
   factory GadgetStock.fromMap(Map<String, dynamic> map, String id) {
@@ -63,6 +75,12 @@ class GadgetStock extends BaseModel {
       sellingPrice: (map['sellingPrice'] ?? 0).toDouble(),
       profit: (map['profit'] ?? 0).toDouble(),
       stockStatus: map['stockStatus'] ?? 'in_stock',
+      damagedQuantity: (map['damagedQuantity'] ?? 0).toInt(),
+      damageValue: (map['damageValue'] ?? 0).toDouble(),
+      isReturned: map['isReturned'] ?? false,
+      returnedQuantity: (map['returnedQuantity'] ?? 0).toInt(),
+      returnReason: map['returnReason'] ?? '',
+      returnedAt: BaseModel.parseDateTime(map['returnedAt']),
       createdAt: BaseModel.timestampToDate(map['createdAt']),
       updatedAt: BaseModel.timestampToDate(map['updatedAt']),
     );
@@ -93,6 +111,14 @@ class GadgetStock extends BaseModel {
       'sellingPrice': sellingPrice,
       'profit': profit,
       'stockStatus': stockStatus,
+      'damagedQuantity': damagedQuantity,
+      'damageValue': damageValue,
+      'isReturned': isReturned,
+      'returnedQuantity': returnedQuantity,
+      'returnReason': returnReason,
+      'returnedAt': returnedAt != null
+          ? BaseModel.dateToTimestamp(returnedAt!)
+          : null,
       'createdAt': BaseModel.dateToTimestamp(createdAt),
       'updatedAt': BaseModel.dateToTimestamp(updatedAt),
     };
@@ -119,6 +145,12 @@ class GadgetStock extends BaseModel {
     String? stockStatus,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? damagedQuantity,
+    double? damageValue,
+    bool? isReturned,
+    int? returnedQuantity,
+    String? returnReason,
+    DateTime? returnedAt,
   }) {
     return GadgetStock(
       id: id ?? this.id,
@@ -141,7 +173,22 @@ class GadgetStock extends BaseModel {
       stockStatus: stockStatus ?? this.stockStatus,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      damagedQuantity: damagedQuantity ?? this.damagedQuantity,
+      damageValue: damageValue ?? this.damageValue,
+      isReturned: isReturned ?? this.isReturned,
+      returnedQuantity: returnedQuantity ?? this.returnedQuantity,
+      returnReason: returnReason ?? this.returnReason,
+      returnedAt: returnedAt ?? this.returnedAt,
     );
+  }
+
+  /// Helper string for UI display of return state
+  String get returnLabel {
+    if (!isReturned && returnedQuantity == 0) return '';
+    if (returnedQuantity > 1) {
+      return 'Returned from customer ($returnedQuantity pcs)';
+    }
+    return 'Returned from customer once';
   }
 
   /// Calculate product cost from all cost components
@@ -195,6 +242,10 @@ class GadgetStock extends BaseModel {
     double otherCosts = 0,
     required double profitMargin,
     double? sellingPriceOverride,
+    bool isReturned = false,
+    int returnedQuantity = 0,
+    String returnReason = '',
+    DateTime? returnedAt,
   }) {
     final now = DateTime.now();
     final productCost = calculateProductCost(
@@ -245,6 +296,10 @@ class GadgetStock extends BaseModel {
       sellingPrice: sellingPrice,
       profit: profit,
       stockStatus: stockStatus,
+      isReturned: isReturned,
+      returnedQuantity: returnedQuantity,
+      returnReason: returnReason,
+      returnedAt: returnedAt,
       createdAt: now,
       updatedAt: now,
     );

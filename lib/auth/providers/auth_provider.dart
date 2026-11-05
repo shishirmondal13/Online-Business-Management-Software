@@ -1,10 +1,12 @@
-import 'package:firebase_auth/firebase_auth.dart';
+﻿import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../../shared/constants/firestore_constants.dart';
 import '../../shared/providers/locale_provider.dart';
+
+import '../../shared/constants/admin_accounts.dart';
 
 /// Firebase Auth instance provider
 final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
@@ -21,18 +23,66 @@ final currentUserIdProvider = Provider<String?>((ref) {
   return ref.watch(authStateProvider).value?.uid;
 });
 
-/// App user data provider - listening to real-time updates for access control
+/// App user data provider - listening to real-time updates with admin auto-healing
 final appUserProvider = StreamProvider<AppUser?>((ref) {
-  final userId = ref.watch(currentUserIdProvider);
-  if (userId == null) return Stream.value(null);
+  final authUser = ref.watch(authStateProvider).value;
+  if (authUser == null) return Stream.value(null);
+
+  final userId = authUser.uid;
+  final authEmail = authUser.email;
+  final isAdminEmail = AdminAccounts.contains(authEmail);
 
   return FirebaseFirestore.instance
       .collection(FirestoreConstants.users)
       .doc(userId)
       .snapshots()
       .map((doc) {
-        if (doc.exists) return AppUser.fromFirestore(doc);
-        return null;
+        if (doc.exists) {
+          final user = AppUser.fromFirestore(doc, fallbackEmail: authEmail);
+
+          // If the signed-in email is in AdminAccounts but Firestore document hasn't synced role to 'admin',
+          // automatically heal and persist the admin role to Firestore.
+          if (isAdminEmail && user.role != 'admin') {
+            FirebaseFirestore.instance
+                .collection(FirestoreConstants.users)
+                .doc(userId)
+                .update({
+              'role': 'admin',
+              'accessLevel': 'edit',
+              if (authEmail != null && authEmail.isNotEmpty) 'email': authEmail,
+              'updatedAt': Timestamp.now(),
+            }).catchError((_) {});
+            return user.copyWith(
+              role: 'admin',
+              accessLevel: 'edit',
+              email: authEmail ?? user.email,
+            );
+          }
+          return user;
+        }
+
+        // Immediate fallback profile if Firestore document does not exist yet
+        final fallback = AppUser(
+          id: userId,
+          userId: userId,
+          email: authEmail,
+          businessName: authUser.displayName?.isNotEmpty == true
+              ? authUser.displayName!
+              : (isAdminEmail ? 'Admin' : 'Business'),
+          language: 'en',
+          role: isAdminEmail ? 'admin' : 'user',
+          accessLevel: 'edit',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        FirebaseFirestore.instance
+            .collection(FirestoreConstants.users)
+            .doc(userId)
+            .set(fallback.toMap(), SetOptions(merge: true))
+            .catchError((_) {});
+
+        return fallback;
       });
 });
 
@@ -152,8 +202,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String password,
     required String businessName,
     required String language,
-    String role = 'user',
-    String? adminCode,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
 
@@ -163,8 +211,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         password: password,
         businessName: businessName,
         language: language,
-        role: role,
-        adminCode: adminCode,
       );
 
       if (result != null) {
@@ -218,10 +264,30 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _authService.sendPasswordResetEmail(email);
       state = state.copyWith(isLoading: false);
       return true;
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Failed to send reset email';
+      switch (e.code) {
+        case 'user-not-found':
+          errorMessage = 'No user account found with this email';
+          break;
+        case 'invalid-email':
+          errorMessage = 'Invalid email address format';
+          break;
+        case 'too-many-requests':
+          errorMessage = 'Too many attempts. Please try again later';
+          break;
+        case 'network-request-failed':
+          errorMessage = 'Network error. Please check your internet connection';
+          break;
+        default:
+          errorMessage = e.message ?? 'Failed to send reset email';
+      }
+      state = state.copyWith(isLoading: false, error: errorMessage);
+      return false;
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Failed to send reset email',
+        error: e.toString().replaceAll('Exception: ', ''),
       );
       return false;
     }
@@ -254,6 +320,8 @@ class AuthService {
       );
 
       final userId = userCredential.user!.uid;
+      final cleanEmail = email.trim();
+      final isAdmin = AdminAccounts.contains(cleanEmail);
 
       // Fetch user data from Firestore
       final userDoc = await _firestore
@@ -262,15 +330,14 @@ class AuthService {
           .get();
 
       if (!userDoc.exists) {
-        // Automatically recreate user profile document with default admin levels on fresh start/database wipe
         final now = DateTime.now();
         final newUser = AppUser(
           id: userId,
           userId: userId,
-          email: email.trim(),
-          businessName: 'I-buzz User',
+          email: cleanEmail,
+          businessName: isAdmin ? 'Smart Buy Admin' : 'Smart Buy User',
           language: 'en',
-          role: 'admin',
+          role: isAdmin ? 'admin' : 'user',
           accessLevel: 'edit',
           createdAt: now,
           updatedAt: now,
@@ -278,17 +345,35 @@ class AuthService {
         await _firestore
             .collection(FirestoreConstants.users)
             .doc(userId)
-            .set(newUser.toMap());
+            .set(newUser.toMap(), SetOptions(merge: true));
 
         // Save email for convenience
-        await _prefs.setString(_savedEmailKey, email);
+        await _prefs.setString(_savedEmailKey, cleanEmail);
         return newUser;
       }
 
-      // Save email for convenience
-      await _prefs.setString(_savedEmailKey, email);
+      final existingUser =
+          AppUser.fromFirestore(userDoc, fallbackEmail: cleanEmail);
 
-      return AppUser.fromFirestore(userDoc);
+      // Auto-heal admin role in Firestore if needed
+      if (isAdmin && existingUser.role != 'admin') {
+        await _firestore.collection(FirestoreConstants.users).doc(userId).update({
+          'role': 'admin',
+          'accessLevel': 'edit',
+          'email': cleanEmail,
+          'updatedAt': Timestamp.now(),
+        }).catchError((_) {});
+        await _prefs.setString(_savedEmailKey, cleanEmail);
+        return existingUser.copyWith(
+          role: 'admin',
+          accessLevel: 'edit',
+          email: cleanEmail,
+        );
+      }
+
+      // Save email for convenience
+      await _prefs.setString(_savedEmailKey, cleanEmail);
+      return existingUser;
     } catch (e) {
       rethrow;
     }
@@ -298,6 +383,8 @@ class AuthService {
   Future<void> checkAndRecreateUserProfile() async {
     final user = _auth.currentUser;
     if (user != null) {
+      final cleanEmail = user.email?.trim() ?? '';
+      final isAdmin = AdminAccounts.contains(cleanEmail);
       final doc = await _firestore
           .collection(FirestoreConstants.users)
           .doc(user.uid)
@@ -307,10 +394,10 @@ class AuthService {
         final newUser = AppUser(
           id: user.uid,
           userId: user.uid,
-          email: user.email ?? '',
-          businessName: 'I-buzz User',
+          email: cleanEmail,
+          businessName: isAdmin ? 'Smart Buy Admin' : 'Smart Buy User',
           language: 'en',
-          role: 'admin',
+          role: isAdmin ? 'admin' : 'user',
           accessLevel: 'edit',
           createdAt: now,
           updatedAt: now,
@@ -318,7 +405,17 @@ class AuthService {
         await _firestore
             .collection(FirestoreConstants.users)
             .doc(user.uid)
-            .set(newUser.toMap());
+            .set(newUser.toMap(), SetOptions(merge: true));
+      } else if (isAdmin) {
+        final data = doc.data() ?? {};
+        if (data['role'] != 'admin' || data['email'] != cleanEmail) {
+          await _firestore.collection(FirestoreConstants.users).doc(user.uid).update({
+            'role': 'admin',
+            'accessLevel': 'edit',
+            if (cleanEmail.isNotEmpty) 'email': cleanEmail,
+            'updatedAt': Timestamp.now(),
+          }).catchError((_) {});
+        }
       }
     }
   }
@@ -328,13 +425,8 @@ class AuthService {
     required String password,
     required String businessName,
     required String language,
-    String role = 'user',
-    String? adminCode,
   }) async {
     try {
-      if (role == 'admin' && adminCode != 'SmartBuy001') {
-        throw Exception('Invalid admin verification code');
-      }
       // Create Firebase Auth user
       final userCredential = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
@@ -350,8 +442,8 @@ class AuthService {
         email: email.trim(),
         businessName: businessName,
         language: language,
-        role: role,
-        accessLevel: role == 'admin' ? 'edit' : 'view',
+        role: 'user',
+        accessLevel: 'view',
         createdAt: now,
         updatedAt: now,
       );

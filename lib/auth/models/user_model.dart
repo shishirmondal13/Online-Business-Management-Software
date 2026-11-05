@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../shared/models/base_model.dart';
+import '../../shared/constants/admin_accounts.dart';
 
 /// User model for authentication
 class AppUser extends BaseModel {
@@ -20,30 +21,39 @@ class AppUser extends BaseModel {
     required this.businessName,
     required this.language,
     this.role = 'user',
-    this.accessLevel = 'view',
+    this.accessLevel = 'edit',
   });
 
-  bool get isAdmin => role == 'admin';
+  bool get isAdmin =>
+      role == 'admin' || AdminAccounts.contains(email);
   bool get canEdit => isAdmin || accessLevel == 'edit';
 
   factory AppUser.fromMap(Map<String, dynamic> map, String id) {
     return AppUser(
       id: id,
       userId: map['userId'] ?? id,
-      email: map['email'],
-      pin: map['pin'],
+      email: map['email'] as String?,
+      pin: map['pin'] as String?,
       businessName: map['businessName'] ?? '',
       language: map['language'] ?? 'en',
       role: map['role'] ?? 'user',
-      accessLevel: map['accessLevel'] ?? 'view',
+      accessLevel: map['accessLevel'] ?? 'edit',
       createdAt: BaseModel.timestampToDate(map['createdAt']),
       updatedAt: BaseModel.timestampToDate(map['updatedAt']),
     );
   }
 
-  factory AppUser.fromFirestore(DocumentSnapshot doc) {
+  factory AppUser.fromFirestore(
+    DocumentSnapshot doc, {
+    String? fallbackEmail,
+  }) {
     final data = doc.data() as Map<String, dynamic>? ?? {};
-    return AppUser.fromMap(data, doc.id);
+    final map = Map<String, dynamic>.from(data);
+    if ((map['email'] == null || (map['email'] as String).isEmpty) &&
+        fallbackEmail != null) {
+      map['email'] = fallbackEmail;
+    }
+    return AppUser.fromMap(map, doc.id);
   }
 
   @override

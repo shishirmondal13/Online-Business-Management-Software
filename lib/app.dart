@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'shared/l10n/app_localizations.dart';
@@ -22,7 +22,7 @@ class IBuzzApp extends ConsumerWidget {
     final firebaseError = ref.watch(firebaseInitErrorProvider);
 
     return MaterialApp(
-      title: 'I-Buzz BD Management',
+      title: 'Smart Buy Online',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       locale: Locale(locale),

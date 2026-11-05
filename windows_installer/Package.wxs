@@ -1,0 +1,149 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="Smart Buy Online"
+           Manufacturer="Smart Buy Online"
+           Version="1.0.0.0"
+           UpgradeCode="4F58B12A-1748-4DF3-9E49-8D19A82D16C4"
+           Scope="perMachine">
+    
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AppIcon" SourceFile="windows\runner\resources\app_icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPHELPLINK" Value="https://smart-buy-online.web.app" />
+
+    <ui:WixUI Id="WixUI_Minimal" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="ManufacturerFolder" Name="Smart Buy Online">
+        <Directory Id="INSTALLFOLDER" Name="Smart Buy Online">
+            <Directory Id="DIR_1" Name="data">
+              <Directory Id="DIR_2" Name="flutter_assets">
+                <Directory Id="DIR_3" Name="fonts">
+                </Directory>
+                <Directory Id="DIR_4" Name="assets">
+                  <Directory Id="DIR_7" Name="images">
+                  </Directory>
+                </Directory>
+                <Directory Id="DIR_5" Name="shaders">
+                </Directory>
+                <Directory Id="DIR_6" Name="packages">
+                  <Directory Id="DIR_8" Name="cupertino_icons">
+                    <Directory Id="DIR_9" Name="assets">
+                    </Directory>
+                  </Directory>
+                </Directory>
+              </Directory>
+            </Directory>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Smart Buy Online">
+        <Component Id="ApplicationShortcut" Directory="ApplicationProgramsFolder" Guid="B6E2C7E5-18A1-42FE-9092-26EC9A5B7F83">
+          <Shortcut Id="ApplicationStartMenuShortcut"
+                    Name="Smart Buy Online"
+                    Description="Smart Buy Online - Mobile &amp; Gadget Management System"
+                    Target="[INSTALLFOLDER]ibuzz_bd_management.exe"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="AppIcon" />
+          <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\SmartBuyOnline\SmartBuyOnline" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcutComponent" Directory="DesktopFolder" Guid="E32D96C1-2856-42AB-963F-A9F71B043B4E">
+        <Shortcut Id="DesktopShortcut"
+                  Name="Smart Buy Online"
+                  Description="Smart Buy Online - Mobile &amp; Gadget Management System"
+                  Target="[INSTALLFOLDER]ibuzz_bd_management.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon" />
+        <RegistryValue Root="HKCU" Key="Software\SmartBuyOnline\SmartBuyOnline" Name="desktop_shortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <ComponentGroup Id="ProductComponents">
+      <Component Id="cmp_1" Directory="INSTALLFOLDER" Guid="A4E311F0-2D4B-439B-8F34-85C73903647D">
+        <File Id="fil_1" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\cloud_firestore_plugin.lib" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_2" Directory="INSTALLFOLDER" Guid="12BCC143-1856-4277-BC0F-D7E36C166DA6">
+        <File Id="fil_2" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\connectivity_plus_plugin.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_3" Directory="INSTALLFOLDER" Guid="290287AA-78E5-42A9-8890-BE81E7AA9E9A">
+        <File Id="fil_3" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\firebase_auth_plugin.lib" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_4" Directory="INSTALLFOLDER" Guid="EB954295-E749-4F57-8201-D6A47367D727">
+        <File Id="fil_4" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\firebase_core_plugin.lib" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_5" Directory="INSTALLFOLDER" Guid="75D2351C-F5E6-4E76-BA37-55DF35E41E32">
+        <File Id="fil_5" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\firebase_storage_plugin.lib" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_6" Directory="INSTALLFOLDER" Guid="D0A05662-5FE7-41D1-AABC-C1337781E5FB">
+        <File Id="fil_6" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\flutter_windows.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_7" Directory="INSTALLFOLDER" Guid="542E96F0-7D4F-4E3D-A973-315EED286B89">
+        <File Id="fil_7" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\ibuzz_bd_management.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_8" Directory="INSTALLFOLDER" Guid="B73E076A-4991-4E47-A4FC-DF5ADB3B4C0A">
+        <File Id="fil_8" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\ibuzz_bd_management.exp" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_9" Directory="INSTALLFOLDER" Guid="C2CF72CD-19F6-48D4-98C8-35116877876C">
+        <File Id="fil_9" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\ibuzz_bd_management.lib" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_10" Directory="INSTALLFOLDER" Guid="655C6E69-F926-41A4-8935-0FB5B9B8808A">
+        <File Id="fil_10" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\native_assets.json" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_11" Directory="INSTALLFOLDER" Guid="58935CC5-1329-4FFA-B82D-5BCD46124B02">
+        <File Id="fil_11" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\pdfium.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_12" Directory="INSTALLFOLDER" Guid="E4C63844-B28E-4EAF-942A-36F7B7E02B36">
+        <File Id="fil_12" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\printing_plugin.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_13" Directory="DIR_1" Guid="679E1DF3-FCD7-48CA-B61D-36A9314B9A6A">
+        <File Id="fil_13" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\data\app.so" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_14" Directory="DIR_1" Guid="DDE47310-FCE7-4039-A0BB-1A55722B347F">
+        <File Id="fil_14" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\data\icudtl.dat" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_15" Directory="DIR_2" Guid="100762B3-ACB4-4BE3-948F-546813A19A10">
+        <File Id="fil_15" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\data\flutter_assets\AssetManifest.bin" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_16" Directory="DIR_2" Guid="13829A62-91CC-450A-9A3A-5EE02944D082">
+        <File Id="fil_16" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\data\flutter_assets\FontManifest.json" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_17" Directory="DIR_2" Guid="00E9E791-98EB-4671-92F4-6BA814E2DC84">
+        <File Id="fil_17" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\data\flutter_assets\NativeAssetsManifest.json" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_18" Directory="DIR_2" Guid="88BE970E-965A-4B70-9B83-3A2E6FA10AC9">
+        <File Id="fil_18" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\data\flutter_assets\NOTICES.Z" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_19" Directory="DIR_7" Guid="7FEDFC4E-47EE-405D-8965-B896547CE6EE">
+        <File Id="fil_19" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\data\flutter_assets\assets\images\logo.png" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_20" Directory="DIR_3" Guid="243297AE-BA66-4859-A25B-B48B88EFC707">
+        <File Id="fil_20" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\data\flutter_assets\fonts\MaterialIcons-Regular.otf" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_21" Directory="DIR_9" Guid="6F06D417-384A-416F-BA2A-B351AFB58E1E">
+        <File Id="fil_21" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\data\flutter_assets\packages\cupertino_icons\assets\CupertinoIcons.ttf" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_22" Directory="DIR_5" Guid="979BE3BB-0A47-43CB-918A-06C4C225DBB2">
+        <File Id="fil_22" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\data\flutter_assets\shaders\ink_sparkle.frag" KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_23" Directory="DIR_5" Guid="08663211-479A-42C4-8C5D-731184D05885">
+        <File Id="fil_23" Source="D:\web app\I-buzz bd mangement\ReleaseBundle\data\flutter_assets\shaders\stretch_effect.frag" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="MainFeature" Title="Smart Buy Online" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentRef Id="ApplicationShortcut" />
+      <ComponentRef Id="DesktopShortcutComponent" />
+    </Feature>
+  </Package>
+</Wix>

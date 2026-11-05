@@ -22,10 +22,12 @@ class _DueDetailsScreenState extends ConsumerState<DueDetailsScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final payments = ref.watch(customerPaymentsProvider(widget.customer.id));
+    final customerAsync = ref.watch(singleCustomerProvider(widget.customer.id));
+    final currentCustomer = customerAsync.value ?? widget.customer;
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: Text(widget.customer.name)),
+      appBar: AppBar(title: Text(currentCustomer.name)),
       body: Column(
         children: [
           // Summary Card
@@ -48,12 +50,12 @@ class _DueDetailsScreenState extends ConsumerState<DueDetailsScreen> {
                 _buildRow(
                   context,
                   l10n.totalDue,
-                  Formatters.formatCurrency(widget.customer.totalDue),
+                  Formatters.formatCurrency(currentCustomer.totalDue),
                 ),
                 _buildRow(
                   context,
                   l10n.paidAmount,
-                  Formatters.formatCurrency(widget.customer.totalPaid),
+                  Formatters.formatCurrency(currentCustomer.totalPaid),
                   color: AppColors.success,
                 ),
                 Padding(
@@ -63,8 +65,10 @@ class _DueDetailsScreenState extends ConsumerState<DueDetailsScreen> {
                 _buildRow(
                   context,
                   l10n.remainingDue,
-                  Formatters.formatCurrency(widget.customer.remainingDue),
-                  color: AppColors.error,
+                  Formatters.formatCurrency(currentCustomer.remainingDue),
+                  color: currentCustomer.remainingDue <= 0.001
+                      ? AppColors.success
+                      : AppColors.error,
                   isBold: true,
                   isLarge: true,
                 ),
@@ -84,7 +88,8 @@ class _DueDetailsScreenState extends ConsumerState<DueDetailsScreen> {
                     color: AppColors.primary,
                   ),
                 ),
-                if (ref.watch(appUserProvider).value?.canEdit ?? false)
+                if ((ref.watch(appUserProvider).value?.canEdit ?? false) &&
+                    currentCustomer.remainingDue > 0.001)
                   TextButton.icon(
                     icon: const Icon(Icons.add_circle_outline),
                     label: Text(l10n.addPayment),
@@ -97,7 +102,7 @@ class _DueDetailsScreenState extends ConsumerState<DueDetailsScreen> {
                     ),
                     onPressed: () {
                       HapticFeedback.mediumImpact();
-                      _showAddPaymentDialog(context);
+                      _showAddPaymentDialog(currentCustomer);
                     },
                   ),
               ],
@@ -229,80 +234,183 @@ class _DueDetailsScreenState extends ConsumerState<DueDetailsScreen> {
     );
   }
 
-  Future<void> _showAddPaymentDialog(BuildContext context) async {
+  Future<void> _showAddPaymentDialog(Customer currentCustomer) async {
     final l10n = AppLocalizations.of(context)!;
     final amountController = TextEditingController();
     String method = 'cash';
+    bool isSaving = false;
 
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(l10n.addPayment),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AppCurrencyField(controller: amountController, label: l10n.amount),
-            const SizedBox(height: 20),
-            DropdownButtonFormField<String>(
-              initialValue: method,
-              decoration: InputDecoration(
-                labelText: l10n.paymentMethod,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 16,
-                ),
-              ),
-              items: ['cash', 'bkash', 'nagad', 'bank']
-                  .map(
-                    (m) => DropdownMenuItem(
-                      value: m,
-                      child: Text(m.toUpperCase()),
+    try {
+      await showDialog(
+        context: context,
+        builder: (dialogCtx) => StatefulBuilder(
+          builder: (dialogCtx, setDialogState) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Text(l10n.addPayment),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${l10n.remainingDue}:',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
+                      ),
                     ),
-                  )
-                  .toList(),
-              onChanged: (v) => method = v ?? 'cash',
+                    Text(
+                      Formatters.formatCurrency(currentCustomer.remainingDue),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.error,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.check_circle_outline, size: 16),
+                    label: const Text('Clear Full Due'),
+                    onPressed: isSaving
+                        ? null
+                        : () {
+                            setDialogState(() {
+                              amountController.text = currentCustomer.remainingDue
+                                  .toStringAsFixed(2);
+                            });
+                          },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                AppCurrencyField(
+                  controller: amountController,
+                  label: l10n.amount,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: method,
+                  decoration: InputDecoration(
+                    labelText: l10n.paymentMethod,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                  ),
+                  items: ['cash', 'bkash', 'nagad', 'bank']
+                      .map(
+                        (m) => DropdownMenuItem(
+                          value: m,
+                          child: Text(m.toUpperCase()),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: isSaving
+                      ? null
+                      : (v) => setDialogState(() => method = v ?? 'cash'),
+                ),
+              ],
             ),
-          ],
-        ),
-        actionsPadding: const EdgeInsets.all(20),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(l10n.cancel),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+            actionsPadding: const EdgeInsets.all(20),
+            actions: [
+              TextButton(
+                onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                child: Text(l10n.cancel),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-            onPressed: () async {
-              final amount = double.tryParse(amountController.text) ?? 0;
-              if (amount > 0) {
-                final userId = ref.read(currentUserIdProvider);
-                await ref
-                    .read(salesServiceProvider)
-                    .addPayment(
-                      userId: userId!,
-                      customerId: widget.customer.id,
-                      saleId: '',
-                      amount: amount,
-                      paymentMethod: method,
-                    );
-                if (ctx.mounted) Navigator.pop(ctx);
-              }
-            },
-            child: Text(l10n.save),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                ),
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        final amount =
+                            double.tryParse(amountController.text) ?? 0;
+                        if (amount <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Please enter a valid amount'),
+                            ),
+                          );
+                          return;
+                        }
+                        setDialogState(() => isSaving = true);
+                        try {
+                          final userId = ref.read(currentUserIdProvider);
+                          if (userId == null) {
+                            throw StateError('User not authenticated');
+                          }
+                          await ref
+                              .read(salesServiceProvider)
+                              .addPayment(
+                                userId: userId,
+                                customerId: currentCustomer.id,
+                                saleId: '',
+                                amount: amount,
+                                paymentMethod: method,
+                              );
+                          if (dialogCtx.mounted) {
+                            Navigator.pop(dialogCtx);
+                          }
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Payment recorded and sales updated!'),
+                                backgroundColor: AppColors.success,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Payment failed: $e')),
+                            );
+                          }
+                        } finally {
+                          if (dialogCtx.mounted) {
+                            setDialogState(() => isSaving = false);
+                          }
+                        }
+                      },
+                child: isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(l10n.save),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
+        ),
+      );
+    } finally {
+      amountController.dispose();
+    }
   }
 }

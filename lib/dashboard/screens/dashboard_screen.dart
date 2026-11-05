@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import '../../shared/l10n/app_localizations.dart';
@@ -24,6 +24,9 @@ import '../../reports/screens/profit_loss_report_screen.dart';
 import '../../reports/screens/transaction_history_screen.dart';
 import '../../baki_due/screens/customer_due_list_screen.dart';
 import 'unsold_products_screen.dart';
+import 'returned_products_screen.dart';
+import '../widgets/dashboard_3d_card.dart';
+import '../../returns/screens/damage_history_screen.dart';
 import '../../shared/services/notification_service.dart';
 import '../../salary/screens/salary_payment_screen.dart';
 import '../../expenses/screens/add_expense_screen.dart';
@@ -36,6 +39,27 @@ import '../../sales/providers/sales_provider.dart';
 import '../../capital/providers/capital_provider.dart';
 import '../../salary/providers/salary_provider.dart';
 import '../../expenses/providers/expense_provider.dart';
+import '../../returns/providers/return_provider.dart';
+import '../../admin/screens/admin_dashboard_screen.dart';
+import '../../shared/constants/admin_accounts.dart';
+
+class _DashboardOutflowItem {
+  final String id;
+  final String title;
+  final double amount;
+  final DateTime date;
+  final String notes;
+  final bool isSalary;
+
+  _DashboardOutflowItem({
+    required this.id,
+    required this.title,
+    required this.amount,
+    required this.date,
+    required this.notes,
+    required this.isSalary,
+  });
+}
 
 /// Dashboard screen - main home screen with business overview
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -56,7 +80,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       if (userId != null) {
         _notificationService = ref.read(notificationServiceProvider);
         await _notificationService!.startListening(userId);
-        
+
         // Auto-recreate user profile document if it was deleted (e.g. database wipe)
         await ref.read(authServiceProvider).checkAndRecreateUserProfile();
       }
@@ -73,15 +97,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final dashboardData = ref.watch(dashboardDataProvider);
+    final authUser = ref.watch(firebaseAuthProvider).currentUser;
     final appUser = ref.watch(appUserProvider).value;
-    final isAdmin = appUser?.isAdmin ?? false;
+    final isAdmin =
+        (appUser?.isAdmin ?? false) || AdminAccounts.contains(authUser?.email);
 
     return Scaffold(
       drawer: const DashboardDrawer(),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [AppColors.background, AppColors.primary.withValues(alpha: 0.04)],
+            colors: [
+              AppColors.background,
+              AppColors.primary.withValues(alpha: 0.04),
+            ],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -111,6 +140,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               centerTitle: false,
               actions: [
+                if (isAdmin)
+                  IconButton(
+                    icon: const Icon(
+                      Icons.admin_panel_settings_rounded,
+                      color: AppColors.primary,
+                    ),
+                    tooltip: 'Admin Hub',
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AdminDashboardScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 IconButton(
                   icon: const Icon(
                     Icons.search_rounded,
@@ -144,8 +190,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                   onPressed: () {
                     HapticFeedback.lightImpact();
-                    // Show a simple notification history or just navigate to settings for now
-                    // as there is no dedicated notification screen yet.
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Notifications functionality active.'),
@@ -174,25 +218,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 isAdmin,
               ),
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 48,
-                      color: AppColors.error,
+              error: (error, stack) {
+                debugPrint('Dashboard load failed: $error\n$stack');
+                return Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: AppColors.error,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text('Error loading dashboard'),
+                        const SizedBox(height: 8),
+                        SelectableText(
+                          error.toString(),
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => _refreshDashboard(ref),
+                          child: const Text('Retry'),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    const Text('Error loading dashboard'),
-                    const SizedBox(height: 8),
-                    ElevatedButton(
-                      onPressed: () => _refreshDashboard(ref),
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -214,6 +270,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ref.invalidate(capitalProvider);
     ref.invalidate(salaryListProvider);
     ref.invalidate(expenseListProvider);
+    ref.invalidate(returnListProvider);
+    ref.invalidate(damageEventListProvider);
   }
 
   Widget _buildDashboardContent(
@@ -234,23 +292,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         int crossAxisCount = 2;
-        double iconSize = 20;
+        double iconSize = 24;
         double valueFontSize = 18;
         double titleFontSize = 12;
-        double childAspectRatio = 1.4;
+        double childAspectRatio = 1.25;
 
-        if (width > 1100) {
-          crossAxisCount = 4;
-          iconSize = 32;
-          valueFontSize = 24;
-          titleFontSize = 14;
-          childAspectRatio = 1.3;
-        } else if (width > 600) {
+        if (width > 1200) {
           crossAxisCount = 3;
-          iconSize = 28;
           valueFontSize = 22;
           titleFontSize = 13;
-          childAspectRatio = 1.2;
+          childAspectRatio = 1.34;
+        } else if (width > 750) {
+          crossAxisCount = 3;
+          valueFontSize = 19;
+          titleFontSize = 12;
+          childAspectRatio = 1.25;
+        } else if (width > 520) {
+          crossAxisCount = 2;
+          valueFontSize = 17;
+          titleFontSize = 11;
+          childAspectRatio = 1.18;
+        } else {
+          crossAxisCount = 1;
+          valueFontSize = 20;
+          titleFontSize = 13;
+          childAspectRatio = 1.45;
         }
 
         return SingleChildScrollView(
@@ -282,9 +348,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ],
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              // Summary Cards Grid (Glass Style)
+              // Date / Month / Year Filter Bar
+              _buildDateFilterBar(context, ref, data.filter),
+
+              const SizedBox(height: 20),
+
+              // Summary Cards Grid (3D Skeuomorphic Style)
               GridView.count(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -293,13 +364,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 crossAxisSpacing: 16,
                 childAspectRatio: childAspectRatio,
                 children: [
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: l10n.totalCapital,
                     value: Formatters.formatCurrency(data.totalCapital),
-                    icon: Icons.account_balance_wallet_outlined,
-                    color: AppColors.primary,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.account_balance_wallet_outlined,
+                    type: Card3DType.totalCapital,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                     onTap: () {
@@ -312,13 +381,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       );
                     },
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: l10n.availableCapital,
                     value: Formatters.formatCurrency(data.availableCapital),
-                    icon: Icons.savings_outlined,
-                    color: AppColors.success,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.savings_outlined,
+                    type: Card3DType.availableCapital,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                     onTap: () {
@@ -331,13 +398,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       );
                     },
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: 'Total Investment',
                     value: Formatters.formatCurrency(data.capitalInvested),
-                    icon: Icons.monetization_on_outlined,
-                    color: Colors.orange,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.monetization_on_outlined,
+                    type: Card3DType.totalInvestment,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                     onTap: () {
@@ -350,13 +415,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       );
                     },
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: 'Total Sales Volume',
                     value: Formatters.formatCurrency(data.totalSales),
-                    icon: Icons.point_of_sale_outlined,
-                    color: AppColors.info,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.point_of_sale_outlined,
+                    type: Card3DType.totalSales,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                     onTap: () {
@@ -369,15 +432,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       );
                     },
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: 'Unsold Stock',
                     value: Formatters.formatCurrency(
                       data.mobileStockValue + data.gadgetStockValue,
                     ),
-                    icon: Icons.inventory_2_outlined,
-                    color: const Color(0xFF8B5CF6), // Vibrant Violet
-                    iconSize: iconSize,
+                    badgeIcon: Icons.inventory_2_outlined,
+                    type: Card3DType.unsoldStock,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                     onTap: () {
@@ -390,14 +451,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       );
                     },
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: l10n.totalProfit,
                     value: Formatters.formatCurrency(data.totalProfit),
-                    icon: Icons.trending_up,
-                    color: AppColors.success,
-                    isTrend: true,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.trending_up,
+                    type: Card3DType.totalProfit,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                     onTap: () {
@@ -410,14 +468,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       );
                     },
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: l10n.totalLoss,
                     value: Formatters.formatCurrency(data.totalLoss),
-                    icon: Icons.trending_down,
-                    color: AppColors.error,
-                    isTrend: true,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.trending_down,
+                    type: Card3DType.totalLoss,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                     onTap: () {
@@ -430,13 +485,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       );
                     },
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
+                    title: l10n.finalProfit,
+                    value: Formatters.formatCurrency(data.netProfit),
+                    badgeIcon: Icons.emoji_events_outlined,
+                    type: Card3DType.finalProfit,
+                    valueFontSize: valueFontSize,
+                    titleFontSize: titleFontSize,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ProfitLossReportScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  Dashboard3DCard(
                     title: l10n.totalBaki,
                     value: Formatters.formatCurrency(data.totalBaki),
-                    icon: Icons.pending_actions_outlined,
-                    color: AppColors.warning,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.pending_actions_outlined,
+                    type: Card3DType.totalBaki,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                     onTap: () {
@@ -449,6 +519,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       );
                     },
                   ),
+                  Dashboard3DCard(
+                    title: 'Damaged Stock Loss',
+                    value: Formatters.formatCurrency(data.totalDamageLoss),
+                    badgeIcon: Icons.report_problem_outlined,
+                    type: Card3DType.damagedStockLoss,
+                    valueFontSize: valueFontSize,
+                    titleFontSize: titleFontSize,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DamageHistoryScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
 
@@ -456,22 +543,88 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
               // Mobile Sector Overview
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    width: 4,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: AppColors.mobileSector,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppColors.mobileSector.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.smartphone_rounded,
+                          color: AppColors.mobileSector,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Mobile Sector Overview',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Mobile Sector Overview',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ReturnedProductsScreen(
+                                initialSector: 'mobile',
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(
+                          Icons.assignment_return_outlined,
+                          size: 16,
+                          color: AppColors.warning,
+                        ),
+                        label: Text(
+                          'Returned (${data.mobileReturnedCount})',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.warning,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const DamageHistoryScreen(
+                                initialSector: 'mobile',
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(
+                          Icons.report_problem_outlined,
+                          size: 16,
+                          color: AppColors.error,
+                        ),
+                        label: Text(
+                          'Damaged (${data.mobileDamagedCount})',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.error,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -484,47 +637,75 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 crossAxisSpacing: 16,
                 childAspectRatio: childAspectRatio,
                 children: [
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: 'Mobile Sales',
                     value: Formatters.formatCurrency(data.mobileSales),
-                    icon: Icons.smartphone,
-                    color: AppColors.mobileSector,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.smartphone,
+                    type: Card3DType.mobileSales,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: 'Units Sold',
                     value: '${data.mobileUnitsSold}',
-                    icon: Icons.shopping_bag_outlined,
-                    color: Colors.blueGrey,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.shopping_bag_outlined,
+                    type: Card3DType.mobileUnits,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: 'Mobile Profit',
                     value: Formatters.formatCurrency(data.mobileProfit),
-                    icon: Icons.trending_up,
-                    color: AppColors.success,
-                    isTrend: true,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.trending_up,
+                    type: Card3DType.mobileProfit,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: 'Mobile Loss',
                     value: Formatters.formatCurrency(data.mobileLoss),
-                    icon: Icons.trending_down,
-                    color: AppColors.error,
-                    isTrend: true,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.trending_down,
+                    type: Card3DType.mobileLoss,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
+                  ),
+                  Dashboard3DCard(
+                    title: 'Returned Mobiles',
+                    value: '${data.mobileReturnedCount} Items',
+                    badgeIcon: Icons.assignment_return_outlined,
+                    type: Card3DType.mobileReturned,
+                    valueFontSize: valueFontSize,
+                    titleFontSize: titleFontSize,
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ReturnedProductsScreen(
+                            initialSector: 'mobile',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  Dashboard3DCard(
+                    title: 'Damaged Mobiles',
+                    value: '${data.mobileDamagedCount} Items',
+                    badgeIcon: Icons.report_problem_outlined,
+                    type: Card3DType.mobileDamaged,
+                    valueFontSize: valueFontSize,
+                    titleFontSize: titleFontSize,
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DamageHistoryScreen(
+                            initialSector: 'mobile',
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -533,22 +714,88 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
               // Gadget Sector Overview
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    width: 4,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: AppColors.gadgetSector,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppColors.gadgetSector.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.headphones_rounded,
+                          color: AppColors.gadgetSector,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Gadget Sector Overview',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Gadget Sector Overview',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ReturnedProductsScreen(
+                                initialSector: 'gadget',
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(
+                          Icons.assignment_return_outlined,
+                          size: 16,
+                          color: AppColors.warning,
+                        ),
+                        label: Text(
+                          'Returned (${data.gadgetReturnedQuantity})',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.warning,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const DamageHistoryScreen(
+                                initialSector: 'gadget',
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(
+                          Icons.report_problem_outlined,
+                          size: 16,
+                          color: AppColors.error,
+                        ),
+                        label: Text(
+                          'Damaged (${data.gadgetDamagedQuantity})',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.error,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -561,47 +808,75 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 crossAxisSpacing: 16,
                 childAspectRatio: childAspectRatio,
                 children: [
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: 'Gadget Sales',
                     value: Formatters.formatCurrency(data.gadgetSales),
-                    icon: Icons.headphones,
-                    color: AppColors.gadgetSector,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.headphones,
+                    type: Card3DType.gadgetSales,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: 'Units Sold',
                     value: '${data.gadgetUnitsSold}',
-                    icon: Icons.shopping_basket_outlined,
-                    color: Colors.blueGrey,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.shopping_basket_outlined,
+                    type: Card3DType.gadgetUnits,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: 'Gadget Profit',
                     value: Formatters.formatCurrency(data.gadgetProfit),
-                    icon: Icons.trending_up,
-                    color: AppColors.success,
-                    isTrend: true,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.trending_up,
+                    type: Card3DType.gadgetProfit,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
                   ),
-                  _buildGlassCard(
-                    context,
+                  Dashboard3DCard(
                     title: 'Gadget Loss',
                     value: Formatters.formatCurrency(data.gadgetLoss),
-                    icon: Icons.trending_down,
-                    color: AppColors.error,
-                    isTrend: true,
-                    iconSize: iconSize,
+                    badgeIcon: Icons.trending_down,
+                    type: Card3DType.gadgetLoss,
                     valueFontSize: valueFontSize,
                     titleFontSize: titleFontSize,
+                  ),
+                  Dashboard3DCard(
+                    title: 'Returned Gadgets',
+                    value: '${data.gadgetReturnedQuantity} Pcs',
+                    badgeIcon: Icons.assignment_return_outlined,
+                    type: Card3DType.gadgetReturned,
+                    valueFontSize: valueFontSize,
+                    titleFontSize: titleFontSize,
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ReturnedProductsScreen(
+                            initialSector: 'gadget',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  Dashboard3DCard(
+                    title: 'Damaged Gadgets',
+                    value: '${data.gadgetDamagedQuantity} Pcs',
+                    badgeIcon: Icons.report_problem_outlined,
+                    type: Card3DType.gadgetDamaged,
+                    valueFontSize: valueFontSize,
+                    titleFontSize: titleFontSize,
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DamageHistoryScreen(
+                            initialSector: 'gadget',
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -617,18 +892,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 final expenses = expensesAsync.value ?? [];
                 final salaries = salariesAsync.value ?? [];
 
+                final filter = data.filter;
+
                 // Calculate category sums
                 double officeRentSum = 0;
                 double shopRentSum = 0;
                 double extraCostSum = 0;
 
                 for (final exp in expenses) {
-                  if (exp.expenseType == 'Office rent') {
-                    officeRentSum += exp.amount;
-                  } else if (exp.expenseType == 'Shop rent') {
-                    shopRentSum += exp.amount;
-                  } else if (exp.expenseType == 'Extra cost') {
-                    extraCostSum += exp.amount;
+                  if (filter.isWithinRange(exp.date)) {
+                    if (exp.expenseType == 'Office rent') {
+                      officeRentSum += exp.amount;
+                    } else if (exp.expenseType == 'Shop rent') {
+                      shopRentSum += exp.amount;
+                    } else if (exp.expenseType == 'Extra cost') {
+                      extraCostSum += exp.amount;
+                    }
                   }
                 }
 
@@ -637,24 +916,36 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 // Combine them chronologically
                 final List<_DashboardOutflowItem> outlays = [];
                 for (final exp in expenses) {
-                  outlays.add(_DashboardOutflowItem(
-                    id: exp.id,
-                    title: exp.expenseType,
-                    amount: exp.amount,
-                    date: exp.date,
-                    notes: exp.notes.isNotEmpty ? exp.notes : 'Business Expense',
-                    isSalary: false,
-                  ));
+                  if (filter.isWithinRange(exp.date)) {
+                    outlays.add(
+                      _DashboardOutflowItem(
+                        id: exp.id,
+                        title: exp.expenseType,
+                        amount: exp.amount,
+                        date: exp.date,
+                        notes: exp.notes.isNotEmpty
+                            ? exp.notes
+                            : 'Business Expense',
+                        isSalary: false,
+                      ),
+                    );
+                  }
                 }
                 for (final sal in salaries) {
-                  outlays.add(_DashboardOutflowItem(
-                    id: sal.id,
-                    title: 'Salary: ${sal.employeeName}',
-                    amount: sal.totalDeduction,
-                    date: sal.date,
-                    notes: sal.notes != null && sal.notes!.isNotEmpty ? sal.notes! : 'Employee Salary',
-                    isSalary: true,
-                  ));
+                  if (filter.isWithinRange(sal.date)) {
+                    outlays.add(
+                      _DashboardOutflowItem(
+                        id: sal.id,
+                        title: 'Salary: ${sal.employeeName}',
+                        amount: sal.totalDeduction,
+                        date: sal.date,
+                        notes: sal.notes != null && sal.notes!.isNotEmpty
+                            ? sal.notes!
+                            : 'Employee Salary',
+                        isSalary: true,
+                      ),
+                    );
+                  }
                 }
 
                 // Sort chronological descending
@@ -673,20 +964,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         Row(
                           children: [
                             Container(
-                              width: 4,
-                              height: 24,
+                              padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFEF4444), // Crimson/Red for Expenses
-                                borderRadius: BorderRadius.circular(2),
+                                color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.payments_outlined,
+                                color: Color(0xFFEF4444),
+                                size: 20,
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 10),
                             Text(
                               'Expenses Overview',
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
-                              ),
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
                             ),
                           ],
                         ),
@@ -696,14 +992,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => const TransactionHistoryScreen(initialTabIndex: 1),
+                                builder: (_) => const TransactionHistoryScreen(
+                                  initialTabIndex: 1,
+                                ),
                               ),
                             );
                           },
-                          icon: const Icon(Icons.history_rounded, size: 16, color: Color(0xFFEF4444)),
+                          icon: const Icon(
+                            Icons.history_rounded,
+                            size: 16,
+                            color: Color(0xFFEF4444),
+                          ),
                           label: const Text(
                             'View History',
-                            style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: Color(0xFFEF4444),
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
@@ -719,13 +1024,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       crossAxisSpacing: 16,
                       childAspectRatio: childAspectRatio,
                       children: [
-                        _buildGlassCard(
-                          context,
+                        Dashboard3DCard(
                           title: 'Salaries Paid',
                           value: Formatters.formatCurrency(totalSalary),
-                          icon: Icons.badge_outlined,
-                          color: const Color(0xFF6366F1), // Indigo
-                          iconSize: iconSize,
+                          badgeIcon: Icons.badge_outlined,
+                          type: Card3DType.salaryExpense,
                           valueFontSize: valueFontSize,
                           titleFontSize: titleFontSize,
                           onTap: () {
@@ -733,18 +1036,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => const TransactionHistoryScreen(initialTabIndex: 2),
+                                builder: (_) => const TransactionHistoryScreen(
+                                  initialTabIndex: 2,
+                                ),
                               ),
                             );
                           },
                         ),
-                        _buildGlassCard(
-                          context,
+                        Dashboard3DCard(
                           title: 'Office Rent',
                           value: Formatters.formatCurrency(officeRentSum),
-                          icon: Icons.business_outlined,
-                          color: const Color(0xFF0F766E), // Teal
-                          iconSize: iconSize,
+                          badgeIcon: Icons.business_outlined,
+                          type: Card3DType.officeRentExpense,
                           valueFontSize: valueFontSize,
                           titleFontSize: titleFontSize,
                           onTap: () {
@@ -752,18 +1055,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => const TransactionHistoryScreen(initialTabIndex: 1),
+                                builder: (_) => const TransactionHistoryScreen(
+                                  initialTabIndex: 1,
+                                ),
                               ),
                             );
                           },
                         ),
-                        _buildGlassCard(
-                          context,
+                        Dashboard3DCard(
                           title: 'Shop Rent',
                           value: Formatters.formatCurrency(shopRentSum),
-                          icon: Icons.storefront_outlined,
-                          color: const Color(0xFFD97706), // Orange
-                          iconSize: iconSize,
+                          badgeIcon: Icons.storefront_outlined,
+                          type: Card3DType.shopRentExpense,
                           valueFontSize: valueFontSize,
                           titleFontSize: titleFontSize,
                           onTap: () {
@@ -771,18 +1074,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => const TransactionHistoryScreen(initialTabIndex: 1),
+                                builder: (_) => const TransactionHistoryScreen(
+                                  initialTabIndex: 1,
+                                ),
                               ),
                             );
                           },
                         ),
-                        _buildGlassCard(
-                          context,
+                        Dashboard3DCard(
                           title: 'Extra Costs',
                           value: Formatters.formatCurrency(extraCostSum),
-                          icon: Icons.receipt_long_outlined,
-                          color: const Color(0xFFDB2777), // Pink/Rose
-                          iconSize: iconSize,
+                          badgeIcon: Icons.receipt_long_outlined,
+                          type: Card3DType.extraCostExpense,
                           valueFontSize: valueFontSize,
                           titleFontSize: titleFontSize,
                           onTap: () {
@@ -790,7 +1093,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => const TransactionHistoryScreen(initialTabIndex: 1),
+                                builder: (_) => const TransactionHistoryScreen(
+                                  initialTabIndex: 1,
+                                ),
                               ),
                             );
                           },
@@ -818,14 +1123,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         decoration: BoxDecoration(
                           color: AppColors.surface.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: AppColors.divider.withValues(alpha: 0.1)),
+                          border: Border.all(
+                            color: AppColors.divider.withValues(alpha: 0.1),
+                          ),
                         ),
                         child: Column(
                           children: [
                             Icon(
                               Icons.receipt_long_outlined,
                               size: 40,
-                              color: AppColors.textSecondary.withValues(alpha: 0.4),
+                              color: AppColors.textSecondary.withValues(
+                                alpha: 0.4,
+                              ),
                             ),
                             const SizedBox(height: 12),
                             Text(
@@ -848,10 +1157,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           final itemColor = item.isSalary
                               ? const Color(0xFF6366F1) // Indigo
                               : (item.title == 'Office rent'
-                                  ? const Color(0xFF0F766E) // Teal
-                                  : (item.title == 'Shop rent'
-                                      ? const Color(0xFFD97706) // Orange
-                                      : const Color(0xFFDB2777))); // Pink/Rose
+                                    ? const Color(0xFF0F766E) // Teal
+                                    : (item.title == 'Shop rent'
+                                          ? const Color(0xFFD97706) // Orange
+                                          : const Color(
+                                              0xFFDB2777,
+                                            ))); // Pink/Rose
 
                           return Container(
                             margin: const EdgeInsets.only(bottom: 12),
@@ -865,7 +1176,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 end: Alignment.bottomRight,
                               ),
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: itemColor.withValues(alpha: 0.15)),
+                              border: Border.all(
+                                color: itemColor.withValues(alpha: 0.15),
+                              ),
                             ),
                             child: Material(
                               color: Colors.transparent,
@@ -883,7 +1196,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 },
                                 borderRadius: BorderRadius.circular(20),
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 14,
+                                  ),
                                   child: Row(
                                     children: [
                                       // Icon Circle
@@ -894,7 +1210,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                           shape: BoxShape.circle,
                                           boxShadow: [
                                             BoxShadow(
-                                              color: itemColor.withValues(alpha: 0.1),
+                                              color: itemColor.withValues(
+                                                alpha: 0.1,
+                                              ),
                                               blurRadius: 6,
                                               offset: const Offset(0, 2),
                                             ),
@@ -904,10 +1222,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                           item.isSalary
                                               ? Icons.badge_outlined
                                               : (item.title == 'Office rent'
-                                                  ? Icons.business_outlined
-                                                  : (item.title == 'Shop rent'
-                                                      ? Icons.storefront_outlined
-                                                      : Icons.receipt_long_outlined)),
+                                                    ? Icons.business_outlined
+                                                    : (item.title == 'Shop rent'
+                                                          ? Icons
+                                                                .storefront_outlined
+                                                          : Icons
+                                                                .receipt_long_outlined)),
                                           color: itemColor,
                                           size: 20,
                                         ),
@@ -916,7 +1236,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       // Title & Description
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
                                               item.title,
@@ -942,7 +1263,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                       const SizedBox(width: 12),
                                       // Amount & Date
                                       Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
                                         children: [
                                           Text(
                                             '- ${Formatters.formatCurrency(item.amount)}',
@@ -1181,132 +1503,444 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildGlassCard(
-    BuildContext context, {
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-    bool isTrend = false,
-    double iconSize = 20,
-    double valueFontSize = 18,
-    double titleFontSize = 12,
-    VoidCallback? onTap,
-  }) {
+
+
+  Widget _buildDateFilterBar(
+    BuildContext context,
+    WidgetRef ref,
+    DashboardFilter currentFilter,
+  ) {
+    final now = DateTime.now();
+
     return Container(
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color.withValues(alpha: 0.12), color.withValues(alpha: 0.02)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.1),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
+            color: AppColors.primary.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: color.withValues(alpha: 0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Icon(icon, color: color, size: iconSize),
+                    const Icon(
+                      Icons.filter_alt_rounded,
+                      color: AppColors.primary,
+                      size: 20,
                     ),
-                    if (isTrend)
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.5),
-                          shape: BoxShape.circle,
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Period Filter',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
                         ),
-                        child: Icon(
-                          color == AppColors.success
-                              ? Icons.trending_up
-                              : Icons.trending_down,
-                          size: iconSize * 0.7,
-                          color: color,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: currentFilter.isFiltered
+                            ? AppColors.primary.withValues(alpha: 0.12)
+                            : AppColors.background,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: currentFilter.isFiltered
+                              ? AppColors.primary
+                              : AppColors.tableBorder,
                         ),
                       ),
+                      child: Text(
+                        currentFilter.label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: currentFilter.isFiltered
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      value,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: valueFontSize,
-                        color: AppColors.textPrimary,
-                        letterSpacing: -0.5,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+              ),
+              if (currentFilter.isFiltered)
+                InkWell(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    ref.read(dashboardFilterProvider.notifier).state =
+                        const DashboardFilter(label: 'All Time');
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: Row(
+                      children: const [
+                        Icon(
+                          Icons.refresh_rounded,
+                          size: 14,
+                          color: AppColors.error,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Reset',
+                          style: TextStyle(
+                            color: AppColors.error,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: titleFontSize,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip(
+                  context,
+                  label: 'All Time',
+                  isSelected: currentFilter.label == 'All Time',
+                  icon: Icons.all_inclusive_rounded,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    ref.read(dashboardFilterProvider.notifier).state =
+                        const DashboardFilter(label: 'All Time');
+                  },
+                ),
+                const SizedBox(width: 8),
+                _buildFilterChip(
+                  context,
+                  label: 'Today',
+                  isSelected: currentFilter.label == 'Today',
+                  icon: Icons.today_rounded,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    final today = DateTime(now.year, now.month, now.day);
+                    ref
+                        .read(dashboardFilterProvider.notifier)
+                        .state = DashboardFilter(
+                      fromDate: today,
+                      toDate: today,
+                      label: 'Today',
+                    );
+                  },
+                ),
+                const SizedBox(width: 8),
+                _buildFilterChip(
+                  context,
+                  label: 'This Month',
+                  isSelected: currentFilter.label == 'This Month',
+                  icon: Icons.calendar_view_month_rounded,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    final first = DateTime(now.year, now.month, 1);
+                    final lastDay = DateTime(now.year, now.month + 1, 0).day;
+                    final last = DateTime(
+                      now.year,
+                      now.month,
+                      lastDay,
+                      23,
+                      59,
+                      59,
+                    );
+                    ref
+                        .read(dashboardFilterProvider.notifier)
+                        .state = DashboardFilter(
+                      fromDate: first,
+                      toDate: last,
+                      label: 'This Month',
+                    );
+                  },
+                ),
+                const SizedBox(width: 8),
+                _buildFilterChip(
+                  context,
+                  label: 'This Year',
+                  isSelected: currentFilter.label == 'This Year',
+                  icon: Icons.calendar_today_rounded,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    final first = DateTime(now.year, 1, 1);
+                    final last = DateTime(now.year, 12, 31, 23, 59, 59);
+                    ref
+                        .read(dashboardFilterProvider.notifier)
+                        .state = DashboardFilter(
+                      fromDate: first,
+                      toDate: last,
+                      label: 'This Year',
+                    );
+                  },
+                ),
+                const SizedBox(width: 8),
+                _buildFilterChip(
+                  context,
+                  label: 'Pick Month / Year',
+                  isSelected: false,
+                  icon: Icons.edit_calendar_rounded,
+                  isAction: true,
+                  onTap: () => _showMonthYearPicker(context, ref),
+                ),
+                const SizedBox(width: 8),
+                _buildFilterChip(
+                  context,
+                  label: 'Custom Range',
+                  isSelected: false,
+                  icon: Icons.date_range_rounded,
+                  isAction: true,
+                  onTap: () => _showCustomRangePicker(context, ref),
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(
+    BuildContext context, {
+    required String label,
+    required bool isSelected,
+    required IconData icon,
+    required VoidCallback onTap,
+    bool isAction = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.primary
+                : (isAction
+                      ? AppColors.primary.withValues(alpha: 0.08)
+                      : AppColors.background),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? AppColors.primary : AppColors.tableBorder,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected ? Colors.white : AppColors.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.white : AppColors.textPrimary,
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
-}
 
-class _DashboardOutflowItem {
-  final String id;
-  final String title;
-  final double amount;
-  final DateTime date;
-  final String notes;
-  final bool isSalary;
+  void _showMonthYearPicker(BuildContext context, WidgetRef ref) {
+    final now = DateTime.now();
+    int selectedMonth =
+        ref.read(dashboardFilterProvider).fromDate?.month ?? now.month;
+    int selectedYear =
+        ref.read(dashboardFilterProvider).fromDate?.year ?? now.year;
 
-  _DashboardOutflowItem({
-    required this.id,
-    required this.title,
-    required this.amount,
-    required this.date,
-    required this.notes,
-    required this.isSalary,
-  });
+    final months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.calendar_month_rounded, color: AppColors.primary),
+                  SizedBox(width: 10),
+                  Text(
+                    'Select Month & Year',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedMonth,
+                    decoration: InputDecoration(
+                      labelText: 'Month',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.date_range_rounded),
+                    ),
+                    items: List.generate(12, (index) {
+                      return DropdownMenuItem(
+                        value: index + 1,
+                        child: Text(months[index]),
+                      );
+                    }),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setDialogState(() => selectedMonth = val);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedYear,
+                    decoration: InputDecoration(
+                      labelText: 'Year',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.history_rounded),
+                    ),
+                    items: List.generate(11, (index) {
+                      final year = now.year - 5 + index;
+                      return DropdownMenuItem(
+                        value: year,
+                        child: Text('$year'),
+                      );
+                    }),
+                    onChanged: (val) {
+                      if (val != null) setDialogState(() => selectedYear = val);
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () {
+                    final fromDate = DateTime(selectedYear, selectedMonth, 1);
+                    final lastDay = DateTime(
+                      selectedYear,
+                      selectedMonth + 1,
+                      0,
+                    ).day;
+                    final toDate = DateTime(
+                      selectedYear,
+                      selectedMonth,
+                      lastDay,
+                      23,
+                      59,
+                      59,
+                    );
+
+                    ref
+                        .read(dashboardFilterProvider.notifier)
+                        .state = DashboardFilter(
+                      fromDate: fromDate,
+                      toDate: toDate,
+                      label: '${months[selectedMonth - 1]} $selectedYear',
+                    );
+
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text(
+                    'Apply Filter',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showCustomRangePicker(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(primary: AppColors.primary),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      final from = picked.start;
+      final to = picked.end;
+      final label =
+          '${from.day}/${from.month}/${from.year} - ${to.day}/${to.month}/${to.year}';
+
+      ref.read(dashboardFilterProvider.notifier).state = DashboardFilter(
+        fromDate: from,
+        toDate: to,
+        label: label,
+      );
+    }
+  }
 }

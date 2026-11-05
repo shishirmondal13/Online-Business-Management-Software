@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../shared/constants/firestore_constants.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -6,6 +6,8 @@ import '../../mobile_sector/models/mobile_stock.dart';
 import '../../sales/models/sale.dart';
 import '../services/export_service.dart';
 import '../../shared/services/firestore_helpers.dart';
+import '../../returns/models/return_transaction.dart';
+import '../../shared/utils/calculations.dart';
 
 class ReportItem {
   final String name;
@@ -29,6 +31,7 @@ class ReportStats {
   final double totalLoss; // Gross loss from sales
   final double totalBuyingCost; // COGS (Cost of Goods Sold)
   final double operatingExpenses; // Salaries + Other Expenses
+  final double totalReturns;
 
   const ReportStats({
     this.totalSales = 0,
@@ -38,6 +41,7 @@ class ReportStats {
     this.totalLoss = 0,
     this.totalBuyingCost = 0,
     this.operatingExpenses = 0,
+    this.totalReturns = 0,
   });
 
   double get totalCost => totalBuyingCost + operatingExpenses;
@@ -51,6 +55,9 @@ class ReportFilter {
 
   ReportFilter({this.fromDate, this.toDate, this.sector});
 
+  bool contains(DateTime date) =>
+      ReportDateRange(fromDate: fromDate, toDate: toDate).contains(date);
+
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
@@ -58,6 +65,7 @@ class ReportFilter {
         other.fromDate == fromDate &&
         other.toDate == toDate &&
         other.sector == sector;
+
   }
 
   @override
@@ -78,44 +86,36 @@ final filteredReportStatsProvider =
       double totalExpenses = 0;
       double mobileStockValue = 0;
       double gadgetStockValue = 0;
+      double totalReturns = 0;
+      final salesById = <String, Sale>{};
 
-      // 1. Calculate Mobile Metrics (filtered by userId)
+      // 1. Calculate Mobile Metrics
       if (filter.sector == null || filter.sector == 'mobile') {
-        final mobileSnapshot = await firestore
-            .collection(FirestoreConstants.mobileStock)
-            .where(
-              FirestoreConstants.status,
-              isEqualTo: FirestoreConstants.sold,
-            )
+        final mobileSalesSnapshot = await firestore
+            .collection(FirestoreConstants.sales)
+            .where(FirestoreConstants.productType, isEqualTo: 'mobile')
             .get();
 
-        for (final doc in mobileSnapshot.docs) {
-          final mobile = MobileStock.fromFirestore(doc);
+        for (final doc in mobileSalesSnapshot.docs) {
+          final sale = Sale.fromFirestore(doc);
+          salesById[sale.id] = sale;
 
-          if (filter.fromDate != null &&
-              mobile.updatedAt.isBefore(filter.fromDate!)) {
-            continue;
-          }
-          if (filter.toDate != null &&
-              mobile.updatedAt.isAfter(
-                filter.toDate!.add(const Duration(days: 1)),
-              )) {
+          if (!filter.contains(sale.date)) {
             continue;
           }
 
-          final profit = mobile.sellingPrice - mobile.netPurchasePrice;
-          totalSales += mobile.sellingPrice;
-          totalBuyingCost += mobile.netPurchasePrice;
+          totalSales += sale.totalAmount;
+          totalBuyingCost += sale.totalAmount - sale.profit;
 
-          if (profit > 0) {
-            totalProfit += profit;
+          if (sale.profit > 0) {
+            totalProfit += sale.profit;
           } else {
-            totalLoss += profit.abs();
+            totalLoss += sale.profit.abs();
           }
         }
       }
 
-      // 2. Calculate Gadget Metrics (filtered by userId)
+      // 2. Calculate Gadget Metrics
       if (filter.sector == null || filter.sector == 'gadget') {
         final gadgetSalesSnapshot = await firestore
             .collection(FirestoreConstants.sales)
@@ -124,12 +124,9 @@ final filteredReportStatsProvider =
 
         for (final doc in gadgetSalesSnapshot.docs) {
           final sale = Sale.fromFirestore(doc);
+          salesById[sale.id] = sale;
 
-          if (filter.fromDate != null && sale.date.isBefore(filter.fromDate!)) {
-            continue;
-          }
-          if (filter.toDate != null &&
-              sale.date.isAfter(filter.toDate!.add(const Duration(days: 1)))) {
+          if (!filter.contains(sale.date)) {
             continue;
           }
 
@@ -144,7 +141,53 @@ final filteredReportStatsProvider =
         }
       }
 
-      // 3. Calculate Salaries (filtered by userId)
+      // 2b. Apply return refunds and damage losses without deleting the sale.
+      final returnSnapshot = await firestore
+          .collection(FirestoreConstants.returns)
+          .get();
+      for (final doc in returnSnapshot.docs) {
+        final returned = ReturnTransaction.fromFirestore(doc);
+        if (!filter.contains(returned.date)) {
+          continue;
+        }
+        if (filter.sector != null && filter.sector != returned.productType) {
+          continue;
+        }
+        totalReturns += returned.refundAmount;
+        if (returned.productType == FirestoreConstants.gadget ||
+            returned.productType == FirestoreConstants.mobile) {
+          final sale = salesById[returned.saleId];
+          final unitProfit = sale == null || sale.quantity == 0
+              ? 0.0
+              : sale.profit / sale.quantity;
+          final unitCost = sale == null ? 0.0 : sale.sellingPrice - unitProfit;
+          totalSales -= returned.refundAmount;
+          totalBuyingCost -= unitCost * returned.quantity;
+          if (returned.condition == 'resalable') {
+            totalProfit += unitCost * returned.quantity - returned.refundAmount;
+          } else {
+            totalProfit -= returned.refundAmount;
+            totalLoss += unitCost * returned.quantity;
+          }
+        }
+      }
+
+      final damageSnapshot = await firestore
+          .collection(FirestoreConstants.damageEvents)
+          .get();
+      for (final doc in damageSnapshot.docs) {
+        final data = doc.data();
+        final date = FirestoreHelpers.parseTimestamp(data['date']);
+        if (date == null || !filter.contains(date)) {
+          continue;
+        }
+        if (filter.sector != null && filter.sector != data['productType']) {
+          continue;
+        }
+        totalLoss += (data['damageValue'] ?? 0).toDouble();
+      }
+
+      // 3. Calculate Salaries
       if (filter.sector == null) {
         final salarySnapshot = await firestore
             .collection(FirestoreConstants.salary)
@@ -152,13 +195,11 @@ final filteredReportStatsProvider =
         for (final doc in salarySnapshot.docs) {
           final data = doc.data();
           final date = FirestoreHelpers.parseTimestamp(data['date']);
-          if (date == null) continue;
-
-          if (filter.fromDate != null && date.isBefore(filter.fromDate!)) {
+          if (date == null) {
             continue;
           }
-          if (filter.toDate != null &&
-              date.isAfter(filter.toDate!.add(const Duration(days: 1)))) {
+
+          if (!filter.contains(date)) {
             continue;
           }
 
@@ -172,7 +213,7 @@ final filteredReportStatsProvider =
         }
       }
 
-      // 4. Calculate Other Expenses (filtered by userId)
+      // 4. Calculate Other Expenses
       if (filter.sector == null) {
         final expenseSnapshot = await firestore
             .collection(FirestoreConstants.expenses)
@@ -180,13 +221,11 @@ final filteredReportStatsProvider =
         for (final doc in expenseSnapshot.docs) {
           final data = doc.data();
           final date = FirestoreHelpers.parseTimestamp(data['date']);
-          if (date == null) continue;
-
-          if (filter.fromDate != null && date.isBefore(filter.fromDate!)) {
+          if (date == null) {
             continue;
           }
-          if (filter.toDate != null &&
-              date.isAfter(filter.toDate!.add(const Duration(days: 1)))) {
+
+          if (!filter.contains(date)) {
             continue;
           }
 
@@ -194,7 +233,7 @@ final filteredReportStatsProvider =
         }
       }
 
-      // 5. Calculate Unsold Stock Values (filtered by userId)
+      // 5. Calculate Unsold Stock Values
       if (filter.sector == null || filter.sector == 'mobile') {
         final mobileUnsoldSnapshot = await firestore
             .collection(FirestoreConstants.mobileStock)
@@ -229,6 +268,7 @@ final filteredReportStatsProvider =
         totalLoss: totalLoss,
         totalBuyingCost: totalBuyingCost,
         operatingExpenses: totalSalaries + totalExpenses,
+        totalReturns: totalReturns,
       );
     });
 
@@ -240,36 +280,25 @@ final lossHistoryProvider =
       final firestore = FirebaseFirestore.instance;
       final List<ReportItem> items = [];
 
-      // 1. Fetch Mobile Stock Loss (filtered by userId)
+      // 1. Fetch Mobile Stock Loss
       if (filter.sector == null || filter.sector == 'mobile') {
-        final mobileSnapshot = await firestore
-            .collection(FirestoreConstants.mobileStock)
-            .where(
-              FirestoreConstants.status,
-              isEqualTo: FirestoreConstants.sold,
-            )
+        final mobileSalesSnapshot = await firestore
+            .collection(FirestoreConstants.sales)
+            .where(FirestoreConstants.productType, isEqualTo: 'mobile')
             .get();
 
-        for (final doc in mobileSnapshot.docs) {
-          final mobile = MobileStock.fromFirestore(doc);
-          if (filter.fromDate != null &&
-              mobile.updatedAt.isBefore(filter.fromDate!)) {
-            continue;
-          }
-          if (filter.toDate != null &&
-              mobile.updatedAt.isAfter(
-                filter.toDate!.add(const Duration(days: 1)),
-              )) {
+        for (final doc in mobileSalesSnapshot.docs) {
+          final sale = Sale.fromFirestore(doc);
+          if (!filter.contains(sale.date)) {
             continue;
           }
 
-          final profit = mobile.sellingPrice - mobile.netPurchasePrice;
-          if (profit < 0) {
+          if (sale.profit < 0) {
             items.add(
               ReportItem(
-                name: '${mobile.modelName} (IMEI: ${mobile.imeiNumber})',
-                amount: profit.abs(),
-                date: mobile.updatedAt,
+                name: sale.productName,
+                amount: sale.profit.abs(),
+                date: sale.date,
                 type: 'mobile',
               ),
             );
@@ -277,7 +306,7 @@ final lossHistoryProvider =
         }
       }
 
-      // 2. Fetch Gadget Loss (filtered by userId)
+      // 2. Fetch Gadget Loss
       if (filter.sector == null || filter.sector == 'gadget') {
         final salesSnapshot = await firestore
             .collection(FirestoreConstants.sales)
@@ -286,11 +315,7 @@ final lossHistoryProvider =
 
         for (final doc in salesSnapshot.docs) {
           final sale = Sale.fromFirestore(doc);
-          if (filter.fromDate != null && sale.date.isBefore(filter.fromDate!)) {
-            continue;
-          }
-          if (filter.toDate != null &&
-              sale.date.isAfter(filter.toDate!.add(const Duration(days: 1)))) {
+          if (!filter.contains(sale.date)) {
             continue;
           }
 
@@ -319,7 +344,7 @@ final profitHistoryProvider =
       final firestore = FirebaseFirestore.instance;
       final List<ReportItem> items = [];
 
-      // 1. Fetch Mobile Stock Profit (filtered by userId)
+      // 1. Fetch Mobile Stock Profit
       if (filter.sector == null || filter.sector == 'mobile') {
         final mobileSnapshot = await firestore
             .collection(FirestoreConstants.mobileStock)
@@ -331,14 +356,8 @@ final profitHistoryProvider =
 
         for (final doc in mobileSnapshot.docs) {
           final mobile = MobileStock.fromFirestore(doc);
-          if (filter.fromDate != null &&
-              mobile.updatedAt.isBefore(filter.fromDate!)) {
-            continue;
-          }
-          if (filter.toDate != null &&
-              mobile.updatedAt.isAfter(
-                filter.toDate!.add(const Duration(days: 1)),
-              )) {
+          final eventDate = mobile.soldDate ?? mobile.date;
+          if (!filter.contains(eventDate)) {
             continue;
           }
 
@@ -348,7 +367,7 @@ final profitHistoryProvider =
               ReportItem(
                 name: '${mobile.modelName} (IMEI: ${mobile.imeiNumber})',
                 amount: profit,
-                date: mobile.updatedAt,
+                date: eventDate,
                 type: 'mobile',
               ),
             );
@@ -356,7 +375,7 @@ final profitHistoryProvider =
         }
       }
 
-      // 2. Fetch Gadget Profit (filtered by userId)
+      // 2. Fetch Gadget Profit
       if (filter.sector == null || filter.sector == 'gadget') {
         final salesSnapshot = await firestore
             .collection(FirestoreConstants.sales)
@@ -365,11 +384,7 @@ final profitHistoryProvider =
 
         for (final doc in salesSnapshot.docs) {
           final sale = Sale.fromFirestore(doc);
-          if (filter.fromDate != null && sale.date.isBefore(filter.fromDate!)) {
-            continue;
-          }
-          if (filter.toDate != null &&
-              sale.date.isAfter(filter.toDate!.add(const Duration(days: 1)))) {
+          if (!filter.contains(sale.date)) {
             continue;
           }
 

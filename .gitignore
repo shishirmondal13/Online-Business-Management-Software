@@ -64,17 +64,35 @@ pnpm-debug.log*
 *.dll
 *.so
 *.dylib
+*.msi
+*.wixpdb
 ReleaseBundle/
 Releases/
+windows_installer/*.msi
+windows_installer/*.wixpdb
 
 # -------------------------------------------------------------------------
-# Local Database, Private Data, and CSV files
+# Local Database, Private Data, and Documents
 # -------------------------------------------------------------------------
 users.json
 Mobile phone .csv
 *.csv
 *.xlsx
 *.pdf
+*.docx
+
+# -------------------------------------------------------------------------
+# Tooling, Scratch & Analysis Caches
+# -------------------------------------------------------------------------
+graphify-out/
+scratch/
+.firebase/
+
+# -------------------------------------------------------------------------
+# Ephemeral Build Folders
+# -------------------------------------------------------------------------
+/ios/Flutter/ephemeral/
+/macos/Flutter/ephemeral/
 
 # -------------------------------------------------------------------------
 # Local Diagnostic Reports & Temporary Logs
@@ -103,3 +121,10 @@ devices.txt
 *.env
 *.pem
 *.key
+*.jks
+*.keystore
+*.p12
+*.p8
+*.mobileprovision
+*serviceAccountKey*.json
+*service_account*.json

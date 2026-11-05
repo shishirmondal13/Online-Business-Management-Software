@@ -231,6 +231,7 @@ class _EditSaleDialogState extends State<EditSaleDialog> {
   late TextEditingController _contactCtrl;
   late TextEditingController _sellingPriceCtrl;
   late TextEditingController _paidAmountCtrl;
+  late TextEditingController _notesCtrl;
   bool _isLoading = false;
 
   @override
@@ -244,6 +245,17 @@ class _EditSaleDialogState extends State<EditSaleDialog> {
     _paidAmountCtrl = TextEditingController(
       text: widget.sale.paidAmount.toString(),
     );
+    _notesCtrl = TextEditingController(text: widget.sale.notes);
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _contactCtrl.dispose();
+    _sellingPriceCtrl.dispose();
+    _paidAmountCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _save() async {
@@ -280,7 +292,7 @@ class _EditSaleDialogState extends State<EditSaleDialog> {
       final firestore = FirebaseFirestore.instance;
 
       String status = FirestoreConstants.unpaid;
-      if (newPaidAmount >= newTotalAmount) {
+      if (newDueAmount <= 0.001 || newPaidAmount >= newTotalAmount - 0.001) {
         status = FirestoreConstants.paid;
       } else if (newPaidAmount > 0) {
         status = FirestoreConstants.partialPaid;
@@ -294,9 +306,11 @@ class _EditSaleDialogState extends State<EditSaleDialog> {
           FirestoreConstants.sellingPrice: newSellingPrice,
           FirestoreConstants.totalAmount: newTotalAmount,
           FirestoreConstants.paidAmount: newPaidAmount,
-          FirestoreConstants.dueAmount: newDueAmount,
+          FirestoreConstants.dueAmount:
+              newDueAmount <= 0.001 ? 0.0 : newDueAmount,
           FirestoreConstants.profit: newProfit,
           FirestoreConstants.paymentStatus: status,
+          'notes': _notesCtrl.text.trim(),
           FirestoreConstants.updatedAt: FieldValue.serverTimestamp(),
         },
       );
@@ -331,16 +345,32 @@ class _EditSaleDialogState extends State<EditSaleDialog> {
       }
 
       if (diffPaid != 0) {
+        final adjustmentId = firestore
+            .collection(FirestoreConstants.payments)
+            .doc()
+            .id;
+        final adjustmentTime = DateTime.now();
+        batch.set(
+          firestore.collection(FirestoreConstants.payments).doc(adjustmentId),
+          Payment(
+            id: adjustmentId,
+            userId: widget.sale.userId,
+            customerId: widget.sale.customerId,
+            saleId: widget.sale.id,
+            date: adjustmentTime,
+            amount: diffPaid,
+            paymentMethod: 'adjustment',
+            notes: 'Sale payment adjustment',
+            createdAt: adjustmentTime,
+            updatedAt: adjustmentTime,
+          ).toMap(),
+        );
         final capitalRef = await FirestoreHelpers.latestCapitalRef(
           firestore,
           widget.sale.userId,
         );
         if (capitalRef != null) {
-          FirestoreHelpers.incrementCapitalPayment(
-            batch,
-            capitalRef,
-            diffPaid,
-          );
+          FirestoreHelpers.incrementCapitalPayment(batch, capitalRef, diffPaid);
         }
       }
 
@@ -382,6 +412,12 @@ class _EditSaleDialogState extends State<EditSaleDialog> {
                 label: 'Paid Amount',
                 controller: _paidAmountCtrl,
                 keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              AppTextField(
+                label: 'Sale Notes / Warranty / Remarks',
+                controller: _notesCtrl,
+                maxLines: 2,
               ),
             ],
           ),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 
 /// A premium, Excel-inspired data table with sticky headers and zebra striping

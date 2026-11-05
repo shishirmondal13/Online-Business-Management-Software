@@ -17,6 +17,10 @@ class Sale extends BaseModel {
   final double paidAmount;
   final double dueAmount;
   final double profit;
+  final int returnedQuantity;
+  final double returnedAmount;
+  final String returnStatus; // 'none', 'partial', 'full'
+  final String notes;
 
   const Sale({
     required super.id,
@@ -37,9 +41,24 @@ class Sale extends BaseModel {
     required this.paidAmount,
     required this.dueAmount,
     required this.profit,
+    this.returnedQuantity = 0,
+    this.returnedAmount = 0,
+    this.returnStatus = 'none',
+    this.notes = '',
   });
 
   factory Sale.fromMap(Map<String, dynamic> map, String id) {
+    final totalAmount = (map['totalAmount'] ?? 0).toDouble();
+    final paidAmount = (map['paidAmount'] ?? 0).toDouble();
+    final dueAmount = (map['dueAmount'] ?? 0).toDouble();
+    String paymentStatus = map['paymentStatus'] ?? 'unpaid';
+
+    // If due is cleared (0) or paid in full, payment status is always 'paid'
+    if ((dueAmount <= 0.001 && (totalAmount > 0 || paidAmount > 0)) ||
+        (totalAmount > 0 && paidAmount >= totalAmount - 0.001)) {
+      paymentStatus = 'paid';
+    }
+
     return Sale(
       id: id,
       userId: map['userId'] ?? '',
@@ -49,14 +68,18 @@ class Sale extends BaseModel {
       productName: map['productName'] ?? '',
       quantity: (map['quantity'] ?? 1).toInt(),
       sellingPrice: (map['sellingPrice'] ?? 0).toDouble(),
-      totalAmount: (map['totalAmount'] ?? 0).toDouble(),
+      totalAmount: totalAmount,
       customerId: map['customerId'] ?? '',
       customerName: map['customerName'] ?? '',
       contactNumber: map['contactNumber'] ?? '',
-      paymentStatus: map['paymentStatus'] ?? 'unpaid',
-      paidAmount: (map['paidAmount'] ?? 0).toDouble(),
-      dueAmount: (map['dueAmount'] ?? 0).toDouble(),
+      paymentStatus: paymentStatus,
+      paidAmount: paidAmount,
+      dueAmount: dueAmount <= 0.001 ? 0.0 : dueAmount,
       profit: (map['profit'] ?? 0).toDouble(),
+      returnedQuantity: (map['returnedQuantity'] ?? 0).toInt(),
+      returnedAmount: (map['returnedAmount'] ?? 0).toDouble(),
+      returnStatus: map['returnStatus'] ?? 'none',
+      notes: map['notes'] ?? '',
       createdAt: BaseModel.timestampToDate(map['createdAt']),
       updatedAt: BaseModel.timestampToDate(map['updatedAt']),
     );
@@ -85,6 +108,10 @@ class Sale extends BaseModel {
       'paidAmount': paidAmount,
       'dueAmount': dueAmount,
       'profit': profit,
+      'returnedQuantity': returnedQuantity,
+      'returnedAmount': returnedAmount,
+      'returnStatus': returnStatus,
+      'notes': notes,
       'createdAt': BaseModel.dateToTimestamp(createdAt),
       'updatedAt': BaseModel.dateToTimestamp(updatedAt),
     };
@@ -107,6 +134,10 @@ class Sale extends BaseModel {
     double? paidAmount,
     double? dueAmount,
     double? profit,
+    int? returnedQuantity,
+    double? returnedAmount,
+    String? returnStatus,
+    String? notes,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -127,6 +158,10 @@ class Sale extends BaseModel {
       paidAmount: paidAmount ?? this.paidAmount,
       dueAmount: dueAmount ?? this.dueAmount,
       profit: profit ?? this.profit,
+      returnedQuantity: returnedQuantity ?? this.returnedQuantity,
+      returnedAmount: returnedAmount ?? this.returnedAmount,
+      returnStatus: returnStatus ?? this.returnStatus,
+      notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -145,12 +180,32 @@ class Sale extends BaseModel {
     required String contactNumber,
     required double paidAmount,
     required double profit,
+    String notes = '',
   }) {
+    if (quantity <= 0) {
+      throw ArgumentError('Quantity must be greater than 0');
+    }
+    if (!{'mobile', 'gadget'}.contains(productType)) {
+      throw ArgumentError('Invalid product type');
+    }
+    if (productType == 'mobile' && quantity != 1) {
+      throw ArgumentError('A mobile sale must contain exactly one device');
+    }
+    if (!sellingPrice.isFinite || sellingPrice <= 0) {
+      throw ArgumentError('Selling price must be greater than 0');
+    }
     final now = DateTime.now();
     final totalAmount = sellingPrice * quantity;
-    final dueAmount = totalAmount - paidAmount;
+    if (!paidAmount.isFinite || paidAmount < 0) {
+      throw ArgumentError('Paid amount cannot be negative');
+    }
+    if (paidAmount > totalAmount) {
+      throw ArgumentError('Paid amount cannot exceed total sale amount');
+    }
+    final rawDue = totalAmount - paidAmount;
+    final dueAmount = rawDue <= 0.001 ? 0.0 : rawDue;
     String paymentStatus = 'unpaid';
-    if (paidAmount >= totalAmount) {
+    if (dueAmount <= 0.001 || paidAmount >= totalAmount - 0.001) {
       paymentStatus = 'paid';
     } else if (paidAmount > 0) {
       paymentStatus = 'partial';
@@ -173,6 +228,7 @@ class Sale extends BaseModel {
       paidAmount: paidAmount,
       dueAmount: dueAmount,
       profit: profit,
+      notes: notes,
       createdAt: now,
       updatedAt: now,
     );

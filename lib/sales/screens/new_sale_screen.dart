@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import '../../shared/l10n/app_localizations.dart';
@@ -33,6 +33,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   final _customerNameController = TextEditingController();
   final _contactController = TextEditingController();
   final _paidAmountController = TextEditingController(text: '0');
+  final _notesController = TextEditingController();
 
   double _totalAmount = 0;
   double _dueAmount = 0;
@@ -55,6 +56,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     _customerNameController.dispose();
     _contactController.dispose();
     _paidAmountController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
@@ -220,7 +222,40 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                                     itemBuilder: (BuildContext context, int index) {
                                       final option = options.elementAt(index);
                                       return ListTile(
-                                        title: Text(option.modelName),
+                                        title: Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(option.modelName),
+                                            ),
+                                            if (option.isReturned ||
+                                                option.returnCount > 0)
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.warning
+                                                      .withValues(alpha: 0.15),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                    color: AppColors.warning
+                                                        .withValues(alpha: 0.5),
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  option.returnLabel,
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.warning,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
                                         subtitle: Text(
                                           'IMEI: ${option.imeiNumber} • Cost: ${Formatters.formatCurrency(option.netPurchasePrice)}',
                                         ),
@@ -323,7 +358,40 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                                     itemBuilder: (BuildContext context, int index) {
                                       final option = options.elementAt(index);
                                       return ListTile(
-                                        title: Text(option.productName),
+                                        title: Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(option.productName),
+                                            ),
+                                            if (option.isReturned ||
+                                                option.returnedQuantity > 0)
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.warning
+                                                      .withValues(alpha: 0.15),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                    color: AppColors.warning
+                                                        .withValues(alpha: 0.5),
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  option.returnLabel,
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.warning,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
                                         subtitle: Text(
                                           'Code: ${option.productCode} (${option.quantity} left) • Cost: ${Formatters.formatCurrency(option.productCost)}',
                                         ),
@@ -482,6 +550,17 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                 ),
               ),
               const SizedBox(height: 32),
+
+              _buildSectionTitle(context, 'Sale Notes / Remarks'),
+              const SizedBox(height: 16),
+              AppTextField(
+                controller: _notesController,
+                label: 'Sale Notes / Warranty / Remarks (Optional)',
+                hint: 'e.g., 1 Year Official Warranty, Screen Protector included, IMEI verified',
+                prefixIcon: Icons.note_alt_outlined,
+                maxLines: 2,
+              ),
+              const SizedBox(height: 32),
               AppButton(
                 text: l10n.save,
                 isLoading: _isLoading,
@@ -579,15 +658,26 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
         contactNumber: _contactController.text.trim(),
         paidAmount: double.tryParse(_paidAmountController.text) ?? 0,
         profit: profit,
+        notes: _notesController.text.trim(),
       );
 
-      final createdSale = await ref.read(salesServiceProvider).createSale(sale);
+      // Keep sale creation independent from native printing. On Windows,
+      // Printing.layoutPdf can fail inside the platform runner; the sale must
+      // remain committed even when a receipt cannot be printed. Receipts remain
+      // available from the Sales list after the transaction completes.
+      await ref.read(salesServiceProvider).createSale(sale);
 
       if (mounted) {
-        await ref.read(receiptServiceProvider).generateReceipt(createdSale);
+        setState(() => _isLoading = false);
+        await ref.read(receiptServiceProvider).showInvoiceOptionsDialog(
+              context,
+              sale,
+              isNewSale: true,
+            );
+        if (mounted) {
+          Navigator.pop(context);
+        }
       }
-
-      if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(

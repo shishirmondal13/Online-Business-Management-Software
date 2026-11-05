@@ -41,7 +41,25 @@ adb install "d:\web app\I-buzz bd mangement\build\app\outputs\flutter-apk\app-re
 
 ---
 
-## 🪟 WINDOWS APPLICATION
+## 💿 WINDOWS MSI INSTALLER
+
+### Location
+```
+d:\web app\I-buzz bd mangement\Releases\IBuzz_BD_Management_Setup_v1.0.0.msi
+```
+
+### Details
+- **File Name:** `IBuzz_BD_Management_Setup_v1.0.0.msi`
+- **Size:** 22.4 MB (Single self-contained installer)
+- **Architecture:** Windows x64
+- **Installation Directory:** `C:\Program Files\Smart Buy Online\I-Buzz BD Management\`
+- **Shortcuts Created:** Desktop & Start Menu
+- **Uninstall Support:** Standard Windows Add/Remove Programs (Control Panel)
+- **Build Script:** `pwsh -File .\build_msi.ps1`
+
+---
+
+## 🪟 WINDOWS PORTABLE APPLICATION
 
 ### Location
 ```
@@ -52,7 +70,6 @@ d:\web app\I-buzz bd mangement\build\windows\x64\runner\Release\ibuzz_bd_managem
 - **Name:** `ibuzz_bd_management.exe`
 - **Size:** 13.80 MB (compressed executable)
 - **Full Install Size:** ~250 MB (with dependencies)
-- **Build Date:** March 17, 2026 at 4:07 AM
 - **Platform:** Windows x64
 - **Status:** ✅ Ready for deployment
 

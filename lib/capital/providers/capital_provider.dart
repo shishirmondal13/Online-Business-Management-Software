@@ -1,12 +1,14 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../shared/constants/firestore_constants.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../sales/providers/sales_provider.dart';
+import '../../sales/models/sale.dart';
 import '../../expenses/providers/expense_provider.dart';
 import '../../salary/providers/salary_provider.dart';
 import '../../mobile_sector/providers/mobile_provider.dart';
 import '../../gadget_sector/providers/gadget_provider.dart';
+import '../../returns/providers/return_provider.dart';
 import './investment_provider.dart';
 import '../models/capital.dart';
 
@@ -30,9 +32,7 @@ final capitalBaseProvider = StreamProvider<Capital?>((ref) {
         docs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         final latest = docs.first;
 
-        return latest.copyWith(
-          initialCapital: totalInitial,
-        );
+        return latest.copyWith(initialCapital: totalInitial);
       });
 });
 
@@ -45,6 +45,7 @@ final capitalProvider = Provider<AsyncValue<Capital?>>((ref) {
   final mobileStockAsync = ref.watch(mobileStockListProvider);
   final gadgetStockAsync = ref.watch(gadgetStockListProvider);
   final salesAsync = ref.watch(salesListProvider);
+  final returnsAsync = ref.watch(returnListProvider);
 
   // Helper to handle combined loading/error state
   if ((baseCapitalAsync.isLoading && !baseCapitalAsync.hasValue) ||
@@ -54,30 +55,64 @@ final capitalProvider = Provider<AsyncValue<Capital?>>((ref) {
       (salariesAsync.isLoading && !salariesAsync.hasValue) ||
       (mobileStockAsync.isLoading && !mobileStockAsync.hasValue) ||
       (gadgetStockAsync.isLoading && !gadgetStockAsync.hasValue) ||
-      (salesAsync.isLoading && !salesAsync.hasValue)) {
+      (salesAsync.isLoading && !salesAsync.hasValue) ||
+      (returnsAsync.isLoading && !returnsAsync.hasValue)) {
     return const AsyncValue.loading();
   }
 
-  if (baseCapitalAsync.hasError && !baseCapitalAsync.hasValue) return AsyncValue.error(baseCapitalAsync.error!, baseCapitalAsync.stackTrace!);
-  if (investmentsAsync.hasError && !investmentsAsync.hasValue) return AsyncValue.error(investmentsAsync.error!, investmentsAsync.stackTrace!);
-  if (paymentsAsync.hasError && !paymentsAsync.hasValue) return AsyncValue.error(paymentsAsync.error!, paymentsAsync.stackTrace!);
-  if (expensesAsync.hasError && !expensesAsync.hasValue) return AsyncValue.error(expensesAsync.error!, expensesAsync.stackTrace!);
-  if (salariesAsync.hasError && !salariesAsync.hasValue) return AsyncValue.error(salariesAsync.error!, salariesAsync.stackTrace!);
-  if (mobileStockAsync.hasError && !mobileStockAsync.hasValue) return AsyncValue.error(mobileStockAsync.error!, mobileStockAsync.stackTrace!);
-  if (gadgetStockAsync.hasError && !gadgetStockAsync.hasValue) return AsyncValue.error(gadgetStockAsync.error!, gadgetStockAsync.stackTrace!);
-  if (salesAsync.hasError && !salesAsync.hasValue) return AsyncValue.error(salesAsync.error!, salesAsync.stackTrace!);
+  if (baseCapitalAsync.hasError && !baseCapitalAsync.hasValue) {
+    return AsyncValue.error(
+      baseCapitalAsync.error!,
+      baseCapitalAsync.stackTrace!,
+    );
+  }
+  if (investmentsAsync.hasError && !investmentsAsync.hasValue) {
+    return AsyncValue.error(
+      investmentsAsync.error!,
+      investmentsAsync.stackTrace!,
+    );
+  }
+  if (paymentsAsync.hasError && !paymentsAsync.hasValue) {
+    return AsyncValue.error(paymentsAsync.error!, paymentsAsync.stackTrace!);
+  }
+  if (expensesAsync.hasError && !expensesAsync.hasValue) {
+    return AsyncValue.error(expensesAsync.error!, expensesAsync.stackTrace!);
+  }
+  if (salariesAsync.hasError && !salariesAsync.hasValue) {
+    return AsyncValue.error(salariesAsync.error!, salariesAsync.stackTrace!);
+  }
+  if (mobileStockAsync.hasError && !mobileStockAsync.hasValue) {
+    return AsyncValue.error(
+      mobileStockAsync.error!,
+      mobileStockAsync.stackTrace!,
+    );
+  }
+  if (gadgetStockAsync.hasError && !gadgetStockAsync.hasValue) {
+    return AsyncValue.error(
+      gadgetStockAsync.error!,
+      gadgetStockAsync.stackTrace!,
+    );
+  }
+  if (salesAsync.hasError && !salesAsync.hasValue) {
+    return AsyncValue.error(salesAsync.error!, salesAsync.stackTrace!);
+  }
+  if (returnsAsync.hasError && !returnsAsync.hasValue) {
+    return AsyncValue.error(returnsAsync.error!, returnsAsync.stackTrace!);
+  }
 
-  final baseCapital = baseCapitalAsync.value ?? Capital(
-    id: '',
-    userId: '',
-    createdAt: DateTime.now(),
-    updatedAt: DateTime.now(),
-    initialCapital: 0,
-    capitalInvested: 0,
-    capitalRecovered: 0,
-    availableCapital: 0,
-    month: '',
-  );
+  final baseCapital =
+      baseCapitalAsync.value ??
+      Capital(
+        id: '',
+        userId: '',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        initialCapital: 0,
+        capitalInvested: 0,
+        capitalRecovered: 0,
+        availableCapital: 0,
+        month: '',
+      );
 
   final investments = investmentsAsync.value ?? [];
   final payments = paymentsAsync.value ?? [];
@@ -86,6 +121,7 @@ final capitalProvider = Provider<AsyncValue<Capital?>>((ref) {
   final mobileStock = mobileStockAsync.value ?? [];
   final gadgetStock = gadgetStockAsync.value ?? [];
   final sales = salesAsync.value ?? [];
+  final returns = returnsAsync.value ?? [];
 
   // Calculate dynamic investments
   double totalInvested = 0;
@@ -131,9 +167,33 @@ final capitalProvider = Provider<AsyncValue<Capital?>>((ref) {
       totalGadgetPurchased += (sale.totalAmount - sale.profit);
     }
   }
+  for (final returned in returns) {
+    if (returned.productType != 'gadget' || returned.condition != 'resalable') {
+      continue;
+    }
+    Sale? matchingSale;
+    for (final sale in sales) {
+      if (sale.id == returned.saleId) {
+        matchingSale = sale;
+        break;
+      }
+    }
+    if (matchingSale == null || matchingSale.quantity <= 0) continue;
+    final unitCost =
+        (matchingSale.totalAmount - matchingSale.profit) /
+        matchingSale.quantity;
+    totalGadgetPurchased -= unitCost * returned.quantity;
+  }
 
   // Available Capital = Initial Capital + Investments + Payments - Expenses - Salaries - Mobile Purchase Cost - Gadget Purchase Cost
-  final totalAvailable = baseCapital.initialCapital + totalInvested + totalRecovered - totalExpenses - totalSalaries - totalMobilePurchased - totalGadgetPurchased;
+  final totalAvailable =
+      baseCapital.initialCapital +
+      totalInvested +
+      totalRecovered -
+      totalExpenses -
+      totalSalaries -
+      totalMobilePurchased -
+      totalGadgetPurchased;
 
   return AsyncValue.data(
     baseCapital.copyWith(
@@ -157,6 +217,7 @@ class CapitalService {
     // Check if exists for this month
     final existing = await _firestore
         .collection(FirestoreConstants.capital)
+        .where(FirestoreConstants.userId, isEqualTo: capital.userId)
         .where('month', isEqualTo: month)
         .limit(1)
         .get();

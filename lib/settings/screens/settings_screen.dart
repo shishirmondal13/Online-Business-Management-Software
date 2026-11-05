@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/l10n/app_localizations.dart';
 import '../../shared/constants/app_colors.dart';
@@ -59,6 +59,30 @@ class SettingsScreen extends ConsumerWidget {
                   Text(
                     'Export Data',
                     style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  AppOutlinedButton(
+                    text: 'Export to CSV',
+                    icon: Icons.description_outlined,
+                    onPressed: () async {
+                      try {
+                        await ref.read(exportServiceProvider).exportToCsv();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(l10n.dataExported)),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(e.toString()),
+                              backgroundColor: AppColors.error,
+                            ),
+                          );
+                        }
+                      }
+                    },
                   ),
                   const SizedBox(height: 12),
                   AppOutlinedButton(

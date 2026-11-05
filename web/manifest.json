@@ -1,11 +1,11 @@
 {
-    "name": "ibuzz_bd_management",
-    "short_name": "ibuzz_bd_management",
+    "name": "Smart Buy Online",
+    "short_name": "Smart Buy Online",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Smart Buy Online - Mobile & Gadget Management App",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

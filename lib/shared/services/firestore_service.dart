@@ -1,5 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../auth/providers/auth_provider.dart';
 
 /// Base Firestore service provider
 final firestoreProvider = Provider<FirebaseFirestore>((ref) {
@@ -9,8 +10,9 @@ final firestoreProvider = Provider<FirebaseFirestore>((ref) {
 /// Generic Firestore service for CRUD operations
 class FirestoreService {
   final FirebaseFirestore _firestore;
+  final String? _userId;
 
-  FirestoreService(this._firestore);
+  FirestoreService(this._firestore, this._userId);
 
   /// Get collection reference
   CollectionReference<Map<String, dynamic>> collection(String path) {
@@ -29,6 +31,9 @@ class FirestoreService {
     required Map<String, dynamic> data,
     bool merge = true,
   }) async {
+    if (_userId == null || data['userId'] != _userId) {
+      throw StateError('Firestore data must belong to the authenticated user.');
+    }
     await _firestore
         .collection(collection)
         .doc(documentId)
@@ -60,6 +65,9 @@ class FirestoreService {
     int? limit,
   }) async {
     Query<Map<String, dynamic>> query = _firestore.collection(collection);
+    if (_userId != null) {
+      query = query.where('userId', isEqualTo: _userId);
+    }
 
     if (filters != null) {
       for (final filter in filters) {
@@ -87,6 +95,9 @@ class FirestoreService {
     int? limit,
   }) {
     Query<Map<String, dynamic>> query = _firestore.collection(collection);
+    if (_userId != null) {
+      query = query.where('userId', isEqualTo: _userId);
+    }
 
     if (filters != null) {
       for (final filter in filters) {
@@ -240,5 +251,5 @@ enum FilterOperator {
 /// Firestore service provider
 final firestoreServiceProvider = Provider<FirestoreService>((ref) {
   final firestore = ref.watch(firestoreProvider);
-  return FirestoreService(firestore);
+  return FirestoreService(firestore, ref.watch(currentUserIdProvider));
 });

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/l10n/app_localizations.dart';
@@ -24,12 +24,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   final _userNameController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _adminCodeController = TextEditingController();
 
   bool _isNewUser = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-  String _selectedRole = 'user';
 
   @override
   void initState() {
@@ -44,7 +42,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _passwordController.dispose();
     _userNameController.dispose();
     _confirmPasswordController.dispose();
-    _adminCodeController.dispose();
     super.dispose();
   }
 
@@ -240,47 +237,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               },
                             ),
                             const SizedBox(height: 16),
-                             AppDropdownField<String>(
-                              value: _selectedRole,
-                              label: 'Role',
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'admin',
-                                  child: Text('Admin (Full View & Edit Access)'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'user',
-                                  child: Text('Staff/User (View-only Access)'),
-                                ),
-                              ],
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    _selectedRole = value;
-                                  });
-                                }
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            if (_selectedRole == 'admin') ...[
-                              AppTextField(
-                                controller: _adminCodeController,
-                                label: 'Admin Code',
-                                hint: 'Enter admin verification code',
-                                prefixIcon: Icons.security,
-                                obscureText: true,
-                                validator: (value) {
-                                  if (value == null || value.trim().isEmpty) {
-                                    return 'Admin code is required';
-                                  }
-                                  if (value.trim() != 'SmartBuy001') {
-                                    return 'Invalid admin code';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 16),
-                            ],
                           ],
 
                           // Password Field
@@ -479,8 +435,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         password: password,
         businessName: userName,
         language: locale,
-        role: _selectedRole,
-        adminCode: _selectedRole == 'admin' ? _adminCodeController.text.trim() : null,
       );
     } else {
       await authNotifier.login(email: email, password: password);
@@ -488,43 +442,241 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _handleForgotPassword() async {
-    final email = _emailController.text.trim();
+    final resetEmailController = TextEditingController(
+      text: _emailController.text.trim(),
+    );
+    final dialogFormKey = GlobalKey<FormState>();
+    bool isSubmitting = false;
+    String? dialogError;
 
-    if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your email first'),
-          backgroundColor: AppColors.warning,
-        ),
-      );
-      return;
-    }
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              backgroundColor: AppColors.surface,
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.lock_reset_outlined,
+                      color: AppColors.primary,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Reset Password',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 380,
+                child: Form(
+                  key: dialogFormKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Enter your registered email address. We will send you a secure link to reset your password.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      TextFormField(
+                        controller: resetEmailController,
+                        keyboardType: TextInputType.emailAddress,
+                        autofocus: resetEmailController.text.isEmpty,
+                        enabled: !isSubmitting,
+                        decoration: InputDecoration(
+                          labelText: 'Email Address',
+                          hintText: 'example@email.com',
+                          prefixIcon: const Icon(Icons.email_outlined, size: 20),
+                          filled: true,
+                          fillColor: AppColors.background,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppColors.tableBorder),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppColors.tableBorder),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.primary,
+                              width: 1.5,
+                            ),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return 'Email is required';
+                          }
+                          if (!RegExp(
+                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                          ).hasMatch(val.trim())) {
+                            return 'Enter a valid email address';
+                          }
+                          return null;
+                        },
+                      ),
+                      if (dialogError != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.errorLight,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppColors.error.withValues(alpha: 0.2),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: AppColors.error,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  dialogError!,
+                                  style: const TextStyle(
+                                    color: AppColors.error,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actionsPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 16,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(dialogContext),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          if (!dialogFormKey.currentState!.validate()) {
+                            return;
+                          }
 
-    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid email'),
-          backgroundColor: AppColors.warning,
-        ),
-      );
-      return;
-    }
+                          setDialogState(() {
+                            isSubmitting = true;
+                            dialogError = null;
+                          });
 
-    final success = await ref
-        .read(authNotifierProvider.notifier)
-        .resetPassword(email);
+                          final emailToReset = resetEmailController.text.trim();
+                          final success = await ref
+                              .read(authNotifierProvider.notifier)
+                              .resetPassword(emailToReset);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success
-                ? 'Password reset email sent! Check your inbox.'
-                : 'Failed to send reset email',
-          ),
-          backgroundColor: success ? AppColors.success : AppColors.error,
-        ),
-      );
-    }
+                          if (!context.mounted) return;
+
+                          if (success) {
+                            Navigator.pop(dialogContext);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle_outline,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Password reset email sent! Check your inbox or spam folder.',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                backgroundColor: AppColors.success,
+                                duration: Duration(seconds: 5),
+                              ),
+                            );
+                          } else {
+                            final latestError =
+                                ref.read(authNotifierProvider).error;
+                            setDialogState(() {
+                              isSubmitting = false;
+                              dialogError =
+                                  latestError ?? 'Failed to send reset email';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 12,
+                    ),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          'Send Reset Link',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }

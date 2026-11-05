@@ -12,20 +12,46 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && getUserData().role == 'admin';
+        && (
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && getUserData().role == 'admin'
+          )
+          || request.auth.token.email in [
+            'smart06buy08online25@gmail.com',
+            'smshishir13@gmail.com',
+            'raihan@gmail.com',
+            'raihanx9@gmail.com',
+            'smdew20@gmail.com',
+            'test@gmail.com'
+          ]
+        );
     }
 
     function canEdit() {
       return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && (getUserData().role == 'admin' || getUserData().accessLevel == 'edit');
+        && (
+          isAdmin()
+          || !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          || getUserData().accessLevel != 'view'
+          || getUserData().role == 'admin'
+        );
     }
 
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if request.auth.uid == userId || isAdmin();
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.userId == userId;
+      allow update: if isAdmin()
+        || (request.auth.uid == userId
+          && request.resource.data.userId == resource.data.userId
+          && (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'email', 'businessName', 'language', 'pin', 'updatedAt'
+            ])
+            || isAdmin()
+          ));
       allow delete: if isAdmin();
     }
 
@@ -34,12 +60,52 @@ service cloud.firestore {
         return collection in [
           'mobile_stock', 'gadget_stock', 'transport_costs', 'sales',
           'customers', 'payments', 'capital', 'salary', 'expenses', 'employees',
-          'investment_history'
+          'investment_history', 'returns', 'damage_events'
         ];
       }
 
-      allow read: if isTenantCollection() && isSignedIn();
-      allow create, update, delete: if isTenantCollection() && canEdit();
+      function validSale(data) {
+        return data.keys().hasAll([
+            'userId', 'productType', 'productId', 'productName', 'quantity',
+            'sellingPrice', 'totalAmount', 'paidAmount', 'dueAmount'
+          ])
+          && data.productType in ['mobile', 'gadget']
+          && data.productId is string
+          && data.productId != ''
+          && data.productName is string
+          && data.productName != ''
+          && data.quantity is number
+          && data.quantity > 0
+          && (data.productType != 'mobile' || data.quantity == 1)
+          && data.sellingPrice is number
+          && data.sellingPrice > 0
+          && data.totalAmount is number
+          && data.totalAmount > 0
+          && data.paidAmount is number
+          && data.paidAmount >= 0
+          && data.paidAmount <= data.totalAmount
+          && data.dueAmount is number
+          && data.dueAmount >= 0;
+      }
+
+      function validTenantData(data) {
+        return collection != 'sales' || validSale(data);
+      }
+
+      allow read: if isTenantCollection()
+        && isSignedIn();
+      allow create: if isTenantCollection()
+        && canEdit()
+        && request.resource.data.userId == request.auth.uid
+        && validTenantData(request.resource.data);
+      allow update: if isTenantCollection()
+        && canEdit()
+        && (resource.data.userId == request.auth.uid || isAdmin())
+        && request.resource.data.userId == resource.data.userId
+        && validTenantData(request.resource.data);
+      allow delete: if isTenantCollection()
+        && canEdit()
+        && (resource.data.userId == request.auth.uid || isAdmin());
     }
   }
 }

@@ -7,9 +7,11 @@ import '../../shared/utils/calculations.dart';
 import '../../shared/widgets/app_table.dart';
 import '../../shared/widgets/app_text_field.dart';
 
+import '../models/sale.dart';
 import '../providers/sales_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'new_sale_screen.dart';
+import '../../returns/screens/return_sale_dialog.dart';
 
 class SalesListScreen extends ConsumerStatefulWidget {
   const SalesListScreen({super.key});
@@ -20,6 +22,17 @@ class SalesListScreen extends ConsumerStatefulWidget {
 
 class _SalesListScreenState extends ConsumerState<SalesListScreen> {
   final _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final userId = ref.read(currentUserIdProvider);
+      if (userId != null) {
+        ref.read(salesServiceProvider).syncClearedSalesStatus(userId);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -126,6 +139,12 @@ class _SalesListScreenState extends ConsumerState<SalesListScreen> {
                         flex: 1,
                         align: TextAlign.center,
                       ),
+                      if (canEdit)
+                        const AppTableColumn(
+                          label: 'Return',
+                          flex: 1,
+                          align: TextAlign.center,
+                        ),
                     ],
                     rows: filteredList.map((sale) {
                       return AppTableRow(
@@ -169,17 +188,41 @@ class _SalesListScreenState extends ConsumerState<SalesListScreen> {
                               ),
                             ),
                           Center(
-                            child: _buildStatusBadge(sale.paymentStatus, l10n),
+                            child: _buildStatusBadge(sale, l10n, canEdit),
                           ),
                           IconButton(
                             icon: const Icon(Icons.receipt_long_outlined),
                             color: AppColors.primary,
+                            tooltip: 'Invoice & Download PDF',
                             onPressed: () {
                               ref
                                   .read(receiptServiceProvider)
-                                  .generateReceipt(sale);
+                                  .showInvoiceOptionsDialog(context, sale);
                             },
                           ),
+                          if (canEdit)
+                            IconButton(
+                              icon: const Icon(
+                                Icons.assignment_return_outlined,
+                              ),
+                              color: AppColors.warning,
+                              tooltip: 'Return product',
+                              onPressed: sale.returnedQuantity >= sale.quantity
+                                  ? null
+                                  : () async {
+                                      final changed = await showDialog<bool>(
+                                        context: context,
+                                        builder: (_) =>
+                                            ReturnSaleDialog(sale: sale),
+                                      );
+                                      if (changed == true && context.mounted) {
+                                        ref.invalidate(salesListProvider);
+                                        ref.invalidate(
+                                          customersDueListProvider,
+                                        );
+                                      }
+                                    },
+                            ),
                         ],
                       );
                     }).toList(),
@@ -207,10 +250,14 @@ class _SalesListScreenState extends ConsumerState<SalesListScreen> {
     );
   }
 
-  Widget _buildStatusBadge(String status, AppLocalizations l10n) {
+  Widget _buildStatusBadge(
+    Sale sale,
+    AppLocalizations l10n,
+    bool canEdit,
+  ) {
     Color color;
     String label;
-    switch (status) {
+    switch (sale.paymentStatus) {
       case 'paid':
         color = AppColors.paid;
         label = l10n.paid;
@@ -223,6 +270,206 @@ class _SalesListScreenState extends ConsumerState<SalesListScreen> {
         color = AppColors.unpaid;
         label = l10n.unpaid;
     }
+
+    if (sale.paymentStatus != 'paid' && canEdit) {
+      return InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          _showClearDueDialog(sale);
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Tooltip(
+          message: 'Click to collect due (৳${sale.dueAmount.toStringAsFixed(2)})',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppStatusPill(label: label, color: color),
+              const SizedBox(width: 4),
+              Icon(Icons.payment, size: 14, color: color),
+            ],
+          ),
+        ),
+      );
+    }
+
     return AppStatusPill(label: label, color: color);
+  }
+
+  Future<void> _showClearDueDialog(Sale sale) async {
+    final l10n = AppLocalizations.of(context)!;
+    final initialDue = sale.dueAmount > 0
+        ? sale.dueAmount
+        : (sale.totalAmount - sale.paidAmount).clamp(0.0, double.infinity);
+    final amountController =
+        TextEditingController(text: initialDue.toStringAsFixed(2));
+    String method = 'cash';
+    bool isSaving = false;
+
+    try {
+      await showDialog(
+        context: context,
+        builder: (dialogCtx) => StatefulBuilder(
+          builder: (dialogCtx, setDialogState) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Text(l10n.addPayment),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${l10n.customerName}: ${sale.customerName}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  '${l10n.productName}: ${sale.productName}',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${l10n.remainingDue}:',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                    Text(
+                      Formatters.formatCurrency(initialDue),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.check_circle_outline, size: 16),
+                    label: const Text('Clear Full Due'),
+                    onPressed: isSaving
+                        ? null
+                        : () {
+                            setDialogState(() {
+                              amountController.text =
+                                  initialDue.toStringAsFixed(2);
+                            });
+                          },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                AppCurrencyField(
+                  controller: amountController,
+                  label: l10n.amount,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  initialValue: method,
+                  decoration: InputDecoration(
+                    labelText: l10n.paymentMethod,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                  ),
+                  items: ['cash', 'bkash', 'nagad', 'bank']
+                      .map(
+                        (m) => DropdownMenuItem(
+                          value: m,
+                          child: Text(m.toUpperCase()),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: isSaving
+                      ? null
+                      : (v) => setDialogState(() => method = v ?? 'cash'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSaving ? null : () => Navigator.pop(dialogCtx),
+                child: Text(l10n.cancel),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        final amount =
+                            double.tryParse(amountController.text) ?? 0;
+                        if (amount <= 0) return;
+                        setDialogState(() => isSaving = true);
+                        try {
+                          final userId = ref.read(currentUserIdProvider);
+                          if (userId == null) {
+                            throw StateError('User not authenticated');
+                          }
+                          await ref
+                              .read(salesServiceProvider)
+                              .addPayment(
+                                customerId: sale.customerId,
+                                amount: amount,
+                                userId: userId,
+                                saleId: sale.id,
+                                paymentMethod: method,
+                                notes: 'Payment against ${sale.productName}',
+                              );
+                          if (dialogCtx.mounted) {
+                            Navigator.pop(dialogCtx);
+                          }
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Payment recorded and sale updated to Paid!'),
+                                backgroundColor: AppColors.success,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Payment failed: $e')),
+                            );
+                          }
+                        } finally {
+                          if (dialogCtx.mounted) {
+                            setDialogState(() => isSaving = false);
+                          }
+                        }
+                      },
+                child: isSaving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(l10n.save),
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      amountController.dispose();
+    }
   }
 }

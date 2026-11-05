@@ -1,5 +1,5 @@
 name: smart_buy_online
-description: "I-Buzz BD Management - Mobile & Gadget Business Management App"
+description: "Smart Buy Online - Mobile & Gadget Business Management App"
 publish_to: 'none'
 version: 1.0.1+2
 
@@ -51,6 +51,7 @@ dependencies:
   # Date & Time
   table_calendar: ^3.1.2
   fl_chart: ^1.1.1
+  file_picker: ^12.1.2
 
 dev_dependencies:
   flutter_test:

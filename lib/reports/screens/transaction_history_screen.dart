@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/constants/app_colors.dart';
 import '../../sales/providers/sales_provider.dart';
@@ -207,15 +207,32 @@ class _SalesListTab extends ConsumerWidget {
                     ),
                   ],
                 ),
-                trailing: canEdit
-                    ? IconButton(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.receipt_long_outlined,
+                        color: AppColors.primary,
+                      ),
+                      tooltip: 'Invoice & Download PDF',
+                      onPressed: () {
+                        ref
+                            .read(receiptServiceProvider)
+                            .showInvoiceOptionsDialog(context, sale);
+                      },
+                    ),
+                    if (canEdit)
+                      IconButton(
                         icon: const Icon(
                           Icons.edit_note_rounded,
-                          color: AppColors.primary,
+                          color: AppColors.info,
                         ),
+                        tooltip: 'Edit Sale',
                         onPressed: () => _editSale(context, sale),
-                      )
-                    : null,
+                      ),
+                  ],
+                ),
               ),
             );
           },

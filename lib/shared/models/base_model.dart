@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Base model class with common fields
 abstract class BaseModel {
@@ -29,7 +29,10 @@ abstract class BaseModel {
     if (timestamp is DateTime) {
       return timestamp;
     }
-    return DateTime.now();
+    // A missing timestamp is data-quality failure, not a record created now.
+    // Use a deterministic sentinel so reports do not silently move old data
+    // into the current period.
+    return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   }
 
   /// Convert map to DateTime safely

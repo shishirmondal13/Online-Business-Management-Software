@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'package:excel/excel.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -22,6 +22,23 @@ class ExportService {
       symbol: '৳',
       decimalDigits: 2,
     );
+  }
+
+  Future<Directory> _getTargetDownloadsDirectory() async {
+    try {
+      if (Platform.isWindows) {
+        final userProfile = Platform.environment['USERPROFILE'];
+        if (userProfile != null) {
+          final winDownloads = Directory('$userProfile\\Downloads');
+          if (await winDownloads.exists()) {
+            return winDownloads;
+          }
+        }
+      }
+      final dir = await getDownloadsDirectory();
+      if (dir != null) return dir;
+    } catch (_) {}
+    return await getApplicationDocumentsDirectory();
   }
 
   Future<void> generatePdf({
@@ -378,12 +395,111 @@ class ExportService {
     // Save
     final fileBytes = excel.save();
     if (fileBytes != null) {
-      final directory = await getApplicationDocumentsDirectory();
+      final directory = await _getTargetDownloadsDirectory();
       final fileName =
           'Business_Report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.xlsx';
       final file = File('${directory.path}/$fileName');
       await file.writeAsBytes(fileBytes);
       await OpenFile.open(file.path);
     }
+  }
+
+  Future<void> generateCsv({
+    required DashboardData dashboardData,
+    required List<Sale> sales,
+    required List<MobileStock> mobileStock,
+    required List<GadgetStock> gadgetStock,
+    required List<ReportItem> profitHistory,
+    required List<ReportItem> lossHistory,
+  }) async {
+    final buffer = StringBuffer();
+    buffer.writeln('=== BUSINESS SUMMARY REPORT ===');
+    buffer.writeln('Date,${_dateFormat.format(DateTime.now())}');
+    buffer.writeln('Total Sales,${dashboardData.totalSales}');
+    buffer.writeln('Total Profit,${dashboardData.totalProfit}');
+    buffer.writeln('Total Loss,${dashboardData.totalLoss}');
+    buffer.writeln('Net Balance,${dashboardData.totalProfit - dashboardData.totalLoss}');
+    buffer.writeln('Mobile Stock Value,${dashboardData.mobileStockValue}');
+    buffer.writeln('Gadget Stock Value,${dashboardData.gadgetStockValue}');
+    buffer.writeln();
+
+    buffer.writeln('=== SALES TRANSACTIONS ===');
+    buffer.writeln('Date,Product Type,Product Name,Quantity,Selling Price,Total Amount,Paid Amount,Due Amount,Customer Name,Payment Status');
+    for (final s in sales) {
+      buffer.writeln([
+        _dateFormat.format(s.date),
+        s.productType,
+        '"${s.productName.replaceAll('"', '""')}"',
+        s.quantity,
+        s.sellingPrice,
+        s.totalAmount,
+        s.paidAmount,
+        s.dueAmount,
+        '"${s.customerName.replaceAll('"', '""')}"',
+        s.paymentStatus,
+      ].join(','));
+    }
+    buffer.writeln();
+
+    buffer.writeln('=== MOBILE STOCK ===');
+    buffer.writeln('Date,Model Name,IMEI,Purchase Rate,Transport Cost,Net Price,Selling Price,Profit,Status');
+    for (final s in mobileStock) {
+      buffer.writeln([
+        _dateFormat.format(s.date),
+        '"${s.modelName.replaceAll('"', '""')}"',
+        s.imeiNumber,
+        s.purchaseRate,
+        s.transportCost,
+        s.netPurchasePrice,
+        s.sellingPrice,
+        s.profit,
+        s.status,
+      ].join(','));
+    }
+    buffer.writeln();
+
+    buffer.writeln('=== GADGET STOCK ===');
+    buffer.writeln('Date,Product Code,Product Name,Quantity,Product Cost,Selling Price,Profit Margin,Status');
+    for (final s in gadgetStock) {
+      buffer.writeln([
+        _dateFormat.format(s.date),
+        s.productCode,
+        '"${s.productName.replaceAll('"', '""')}"',
+        s.quantity,
+        s.productCost,
+        s.sellingPrice,
+        s.profitMargin,
+        s.stockStatus,
+      ].join(','));
+    }
+    buffer.writeln();
+
+    buffer.writeln('=== PROFIT & LOSS HISTORY ===');
+    buffer.writeln('Date,Item Name,Type,Amount,Category');
+    for (final p in profitHistory) {
+      buffer.writeln([
+        _dateFormat.format(p.date),
+        '"${p.name.replaceAll('"', '""')}"',
+        p.type,
+        p.amount,
+        'Profit',
+      ].join(','));
+    }
+    for (final l in lossHistory) {
+      buffer.writeln([
+        _dateFormat.format(l.date),
+        '"${l.name.replaceAll('"', '""')}"',
+        l.type,
+        l.amount,
+        'Loss',
+      ].join(','));
+    }
+
+    final directory = await _getTargetDownloadsDirectory();
+    final fileName =
+        'Business_Report_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+    final file = File('${directory.path}/$fileName');
+    await file.writeAsString(buffer.toString());
+    await OpenFile.open(file.path);
   }
 }

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import '../../shared/l10n/app_localizations.dart';
@@ -10,6 +10,7 @@ import '../../shared/widgets/loading_overlay.dart';
 import '../../shared/utils/validators.dart';
 import '../../shared/utils/calculations.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../capital/providers/capital_provider.dart';
 import '../../transport/providers/transport_provider.dart';
 import '../models/gadget_stock.dart';
 import '../providers/gadget_provider.dart';
@@ -132,6 +133,8 @@ class _AddEditGadgetScreenState extends ConsumerState<AddEditGadgetScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final formState = ref.watch(gadgetStockFormProvider);
+    final capitalAsync = ref.watch(capitalProvider);
+    final availableCapital = capitalAsync.value?.availableCapital ?? 0.0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -165,7 +168,7 @@ class _AddEditGadgetScreenState extends ConsumerState<AddEditGadgetScreen> {
                       color: AppColors.errorLight,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: AppColors.error.withValues(alpha:0.3),
+                        color: AppColors.error.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Row(
@@ -181,6 +184,69 @@ class _AddEditGadgetScreenState extends ConsumerState<AddEditGadgetScreen> {
                       ],
                     ),
                   ),
+
+                // Return Info Banner (if product was returned from a customer)
+                if (widget.gadgetStock != null &&
+                    (widget.gadgetStock!.isReturned ||
+                        widget.gadgetStock!.returnedQuantity > 0)) ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.only(bottom: 24),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: AppColors.warning.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.assignment_return_rounded,
+                          color: AppColors.warning,
+                          size: 26,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.gadgetStock!.returnLabel,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.warning,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              if (widget.gadgetStock!.returnReason.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Return Reason: ${widget.gadgetStock!.returnReason}',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                              if (widget.gadgetStock!.returnedAt != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Returned On: ${Formatters.formatDate(widget.gadgetStock!.returnedAt!)}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textHint,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 // Basic Info Section
                 _buildSectionTitle(context, l10n.basicInfo),
@@ -221,6 +287,7 @@ class _AddEditGadgetScreenState extends ConsumerState<AddEditGadgetScreen> {
                 // Cost Breakdown Section
                 _buildSectionTitle(context, l10n.costBreakdown),
                 const SizedBox(height: 16),
+                _buildCapitalIndicator(availableCapital),
                 AppCurrencyField(
                   controller: _purchasePriceController,
                   label: l10n.purchasePrice,
@@ -273,7 +340,7 @@ class _AddEditGadgetScreenState extends ConsumerState<AddEditGadgetScreen> {
                     border: Border.all(color: AppColors.tableBorder),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha:0.02),
+                        color: Colors.black.withValues(alpha: 0.02),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -355,10 +422,180 @@ class _AddEditGadgetScreenState extends ConsumerState<AddEditGadgetScreen> {
     ),
   );
 
+  Widget _buildCapitalIndicator(double availableCapital) {
+    final oldCost = widget.isEditing
+        ? ((widget.gadgetStock?.productCost ?? 0.0) *
+              (widget.gadgetStock?.quantity ?? 0))
+        : 0.0;
+    final requiredCost = _totalCost - oldCost;
+    final isShort = requiredCost > 0 && availableCapital < requiredCost;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: isShort ? AppColors.errorLight : AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isShort ? AppColors.error : AppColors.tableBorder,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isShort
+                ? Icons.error_outline
+                : Icons.account_balance_wallet_outlined,
+            color: isShort ? AppColors.error : AppColors.primary,
+            size: 24,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Available Cash / Capital',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isShort ? AppColors.error : AppColors.textSecondary,
+                  ),
+                ),
+                Text(
+                  Formatters.formatCurrency(availableCapital),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isShort ? AppColors.error : AppColors.textPrimary,
+                  ),
+                ),
+                if (isShort) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '⚠️ Insufficient available capital for this purchase!',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showInsufficientCapitalDialog(
+    double requiredCost,
+    double availableCapital,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 28),
+            SizedBox(width: 10),
+            Text(
+              'Insufficient Capital',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'You cannot add these gadget items to inventory because you do not have enough available capital/cash.',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.errorLight,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.error.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Total Cost Required:'),
+                      Text(
+                        Formatters.formatCurrency(requiredCost),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Available Capital:'),
+                      Text(
+                        Formatters.formatCurrency(availableCapital),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Please add capital in Capital Management before purchasing new inventory.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
     final userId = ref.read(currentUserIdProvider);
     if (userId == null) return;
+
+    final capitalAsync = ref.read(capitalProvider);
+    final availableCapital = capitalAsync.value?.availableCapital ?? 0.0;
+    final oldCost = widget.isEditing
+        ? ((widget.gadgetStock?.productCost ?? 0.0) *
+              (widget.gadgetStock?.quantity ?? 0))
+        : 0.0;
+    final requiredCost = _totalCost - oldCost;
+
+    if (requiredCost > 0 && availableCapital < requiredCost) {
+      _showInsufficientCapitalDialog(requiredCost, availableCapital);
+      return;
+    }
 
     final stock = GadgetStock.create(
       userId: userId,

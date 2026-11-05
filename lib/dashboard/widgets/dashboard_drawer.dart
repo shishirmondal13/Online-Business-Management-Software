@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import '../../shared/l10n/app_localizations.dart';
@@ -23,6 +23,11 @@ import '../../gadget_sector/providers/gadget_provider.dart';
 import '../../sales/providers/sales_provider.dart';
 import '../../capital/providers/capital_provider.dart';
 import '../../salary/providers/salary_provider.dart';
+import '../../returns/providers/return_provider.dart';
+import '../../returns/screens/damage_history_screen.dart';
+import '../screens/returned_products_screen.dart';
+
+import '../../shared/constants/admin_accounts.dart';
 
 /// Dashboard navigation drawer
 class DashboardDrawer extends ConsumerWidget {
@@ -33,7 +38,9 @@ class DashboardDrawer extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final appUserAsync = ref.watch(appUserProvider);
     final appUser = appUserAsync.value;
-    final isAdmin = appUser?.isAdmin ?? false;
+    final authUser = ref.watch(firebaseAuthProvider).currentUser;
+    final isAdmin =
+        (appUser?.isAdmin ?? false) || AdminAccounts.contains(authUser?.email);
 
     return Drawer(
       backgroundColor: AppColors.background,
@@ -116,6 +123,8 @@ class DashboardDrawer extends ConsumerWidget {
                     ref.invalidate(capitalProvider);
                     ref.invalidate(salaryListProvider);
                     ref.invalidate(allCustomersProvider);
+                    ref.invalidate(returnListProvider);
+                    ref.invalidate(damageEventListProvider);
                     // Show a small feedback
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -183,6 +192,34 @@ class DashboardDrawer extends ConsumerWidget {
                       context,
                       MaterialPageRoute(
                         builder: (_) => const TransportSetupScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _DrawerItem(
+                  icon: Icons.report_problem_rounded,
+                  title: 'Damaged Products',
+                  color: AppColors.error,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DamageHistoryScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _DrawerItem(
+                  icon: Icons.assignment_return_rounded,
+                  title: 'Returned Products',
+                  color: AppColors.warning,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ReturnedProductsScreen(),
                       ),
                     );
                   },

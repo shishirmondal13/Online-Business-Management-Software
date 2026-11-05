@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../shared/l10n/app_localizations.dart';
 import '../../shared/constants/app_colors.dart';
@@ -354,19 +354,30 @@ class _ProfitLossReportScreenState
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-            title: const Text('Export to PDF'),
+            leading: const Icon(Icons.description_outlined, color: Colors.blue),
+            title: const Text('Export to CSV Files'),
+            subtitle: const Text('Comma-separated data for spreadsheets'),
             onTap: () {
               Navigator.pop(context);
-              _handleExport(isPdf: true);
+              _handleExport(format: 'csv');
             },
           ),
           ListTile(
             leading: const Icon(Icons.table_chart, color: Colors.green),
-            title: const Text('Export to Excel'),
+            title: const Text('Export to Excel (.xlsx)'),
+            subtitle: const Text('Formatted multi-sheet workbook'),
             onTap: () {
               Navigator.pop(context);
-              _handleExport(isPdf: false);
+              _handleExport(format: 'excel');
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+            title: const Text('Export to PDF Document'),
+            subtitle: const Text('Printable business overview'),
+            onTap: () {
+              Navigator.pop(context);
+              _handleExport(format: 'pdf');
             },
           ),
         ],
@@ -374,7 +385,7 @@ class _ProfitLossReportScreenState
     );
   }
 
-  Future<void> _handleExport({required bool isPdf}) async {
+  Future<void> _handleExport({required String format}) async {
     setState(() => _isExporting = true);
 
     try {
@@ -387,7 +398,6 @@ class _ProfitLossReportScreenState
       final stats = await ref.read(filteredReportStatsProvider(filter).future);
 
       // Construct DashboardData from stats for export
-      // Note: Capital fields will be 0 as they are not part of report stats
       final dashboardData = DashboardData(
         totalSales: stats.totalSales,
         totalProfit: stats.totalProfit,
@@ -404,10 +414,9 @@ class _ProfitLossReportScreenState
         profitHistoryProvider(filter).future,
       );
       final lossHistory = await ref.read(lossHistoryProvider(filter).future);
-
       final exportService = ref.read(exportServiceProvider);
 
-      if (isPdf) {
+      if (format == 'pdf') {
         await exportService.generatePdf(
           dashboardData: dashboardData,
           sales: sales,
@@ -416,8 +425,17 @@ class _ProfitLossReportScreenState
           profitHistory: profitHistory,
           lossHistory: lossHistory,
         );
-      } else {
+      } else if (format == 'excel') {
         await exportService.generateExcel(
+          dashboardData: dashboardData,
+          sales: sales,
+          mobileStock: mobileStock,
+          gadgetStock: gadgetStock,
+          profitHistory: profitHistory,
+          lossHistory: lossHistory,
+        );
+      } else if (format == 'csv') {
+        await exportService.generateCsv(
           dashboardData: dashboardData,
           sales: sales,
           mobileStock: mobileStock,

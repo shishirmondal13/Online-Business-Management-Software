@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../shared/models/base_model.dart';
 
 /// Transport cost model for gadget products

@@ -1,4 +1,4 @@
-/// Utility class for form validation
+﻿/// Utility class for form validation
 class Validators {
   Validators._();
 
@@ -181,7 +181,7 @@ class Validators {
     }
 
     final qty = int.tryParse(value);
-    if (qty == null || qty < 0) {
+    if (qty == null || qty <= 0) {
       return 'Please enter a valid quantity';
     }
 

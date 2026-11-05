@@ -1,4 +1,4 @@
-import 'package:intl/intl.dart';
+﻿import 'package:intl/intl.dart';
 
 /// Utility class for business calculations
 class Calculations {
@@ -57,9 +57,7 @@ class Calculations {
     required double productCost,
     required double profitMargin,
   }) {
-    return _roundCurrency(
-      productCost + (productCost * (profitMargin / 100)),
-    );
+    return _roundCurrency(productCost + (productCost * (profitMargin / 100)));
   }
 
   /// Calculate profit for gadget stock
@@ -144,6 +142,31 @@ class Calculations {
     required double otherGains,
   }) {
     return _roundCurrency(totalSales - totalCost + otherGains);
+  }
+}
+
+/// Inclusive calendar-date range helper used by reports and dashboards.
+class ReportDateRange {
+  final DateTime? fromDate;
+  final DateTime? toDate;
+
+  const ReportDateRange({this.fromDate, this.toDate});
+
+  bool contains(DateTime date) {
+    if (fromDate != null && date.isBefore(fromDate!)) return false;
+    if (toDate != null) {
+      final endOfDay = DateTime(
+        toDate!.year,
+        toDate!.month,
+        toDate!.day,
+        23,
+        59,
+        59,
+        999,
+      );
+      if (date.isAfter(endOfDay)) return false;
+    }
+    return true;
   }
 }
 

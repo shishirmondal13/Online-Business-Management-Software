@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 import '../../shared/constants/firestore_constants.dart';
@@ -23,7 +23,7 @@ final transportCostListProvider = StreamProvider<List<TransportCost>>((ref) {
       });
 });
 
-/// Transport cost for specific product (filtered by userId)
+/// Transport cost for specific product (filtered by productCode)
 final transportCostForProductProvider =
     FutureProvider.family<TransportCost?, String>((ref, productCode) async {
       final userId = ref.watch(currentUserIdProvider);

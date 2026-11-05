@@ -13,6 +13,7 @@ class FirestoreHelpers {
   ) async {
     final query = await firestore
         .collection(FirestoreConstants.capital)
+        .where(FirestoreConstants.userId, isEqualTo: userId)
         .get();
 
     if (query.docs.isEmpty) return null;

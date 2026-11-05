@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Buy Online - Core Financial & Business Calculations</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap');
+
+        @page {
+            size: A4 portrait;
+            margin: 12mm 14mm 14mm 14mm;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: #1e293b;
+            background-color: #ffffff;
+            line-height: 1.45;
+            font-size: 9pt;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .header-container {
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 10px;
+            margin-bottom: 14px;
+        }
+
+        .project-badge {
+            display: inline-block;
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+            padding: 3px 8px;
+            border-radius: 9999px;
+            font-size: 7.5pt;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        h1 {
+            font-size: 17pt;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.4px;
+            line-height: 1.2;
+            margin-bottom: 4px;
+        }
+
+        .subtitle {
+            font-size: 9.5pt;
+            color: #475569;
+            font-weight: 400;
+            margin-bottom: 10px;
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 8pt;
+        }
+
+        .meta-item strong {
+            display: block;
+            color: #64748b;
+            font-size: 7pt;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .meta-item span {
+            color: #0f172a;
+            font-weight: 600;
+        }
+
+        .section-title {
+            font-size: 11pt;
+            font-weight: 700;
+            color: #0f172a;
+            margin-top: 14px;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 1.5px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            page-break-after: avoid;
+        }
+
+        .section-badge {
+            background: #2563eb;
+            color: #ffffff;
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 7.5pt;
+            font-weight: 700;
+        }
+
+        .calc-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 9px 12px;
+            margin-bottom: 8px;
+            page-break-inside: avoid;
+        }
+
+        .calc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 5px;
+        }
+
+        .calc-title {
+            font-size: 9.5pt;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+        .calc-tag {
+            font-size: 7pt;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .formula-box {
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-family: 'Fira Code', monospace;
+            font-size: 8.2pt;
+            margin-bottom: 6px;
+            border-left: 3.5px solid #38bdf8;
+            letter-spacing: 0.2px;
+            white-space: pre-wrap;
+        }
+
+        .formula-box.highlight {
+            border-left-color: #10b981;
+            background: #064e3b;
+            color: #ecfdf5;
+        }
+
+        .formula-desc {
+            font-size: 8pt;
+            color: #475569;
+            margin-bottom: 5px;
+        }
+
+        .variables-list {
+            font-size: 7.5pt;
+            color: #334155;
+            background: #f8fafc;
+            border-radius: 4px;
+            padding: 4px 8px;
+            margin-bottom: 5px;
+        }
+
+        .variables-list span {
+            display: inline-block;
+            margin-right: 12px;
+        }
+
+        .code-snippet {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            padding: 5px 8px;
+            font-family: 'Fira Code', monospace;
+            font-size: 7.2pt;
+            color: #0369a1;
+            white-space: pre-wrap;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8pt;
+            margin: 8px 0;
+            page-break-inside: avoid;
+        }
+
+        th {
+            background: #0f172a;
+            color: #ffffff;
+            font-weight: 700;
+            text-align: left;
+            padding: 6px 8px;
+            border: 1px solid #334155;
+        }
+
+        td {
+            padding: 5px 8px;
+            border: 1px solid #e2e8f0;
+            color: #1e293b;
+        }
+
+        tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        .text-right { text-align: right; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .text-bold { font-weight: 700; }
+        .text-success { color: #059669; }
+        .text-danger { color: #dc2626; }
+        .text-primary { color: #2563eb; }
+
+        .footer-note {
+            margin-top: 14px;
+            padding-top: 8px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 7pt;
+            color: #94a3b8;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Section -->
+    <div class="header-container">
+        <span class="project-badge">CSE 400: Software Development Project IV</span>
+        <h1>Smart Buy Online (I-Buzz BD Management)</h1>
+        <div class="subtitle">Complete Mathematical Models, Financial Algorithms & Business Calculation Specifications</div>
+        
+        <div class="meta-grid">
+            <div class="meta-item">
+                <strong>Platform Stack</strong>
+                <span>Flutter + Cloud Firestore</span>
+            </div>
+            <div class="meta-item">
+                <strong>Base Currency</strong>
+                <span>BDT (Bangladeshi Taka ৳)</span>
+            </div>
+            <div class="meta-item">
+                <strong>Rounding Rule</strong>
+                <span>2-Decimal Precision</span>
+            </div>
+            <div class="meta-item">
+                <strong>Institution</strong>
+                <span>BUBT CSE Department</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 1 -->
+    <div class="section-title">
+        <span class="section-badge">1</span>
+        <span>Mobile Phone Inventory & Dynamic Landed Costing</span>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">1.1. Dynamic Landed Purchase Price (Mobile Sector)</div>
+            <span class="calc-tag">Stock Procurement</span>
+        </div>
+        <div class="formula-desc">When purchasing batches of mobile devices, transport overheads are amortized equally across all units in the batch.</div>
+        <div class="formula-box">Allocated Transport = Total Transport Overhead / Batch Unit Quantity
+Net Purchase Price = Base Purchase Rate + Allocated Transport</div>
+        <div class="code-snippet">double calculateNetPurchasePrice({required double purchaseRate, required double transportCost}) => _roundCurrency(purchaseRate + transportCost);</div>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">1.2. Realized Unit Profit on Mobile Sale</div>
+            <span class="calc-tag">Unit Margin</span>
+        </div>
+        <div class="formula-box">Unit Profit = Selling Price - Net Purchase Price</div>
+        <div class="code-snippet">double calculateMobileProfit({required double sellingPrice, required double netPurchasePrice}) => _roundCurrency(sellingPrice - netPurchasePrice);</div>
+    </div>
+
+    <!-- Section 2 -->
+    <div class="section-title">
+        <span class="section-badge">2</span>
+        <span>Gadget & Accessory Multi-Cost Landed Margin Controller</span>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">2.1. Fully Burdened Gadget Landed Cost</div>
+            <span class="calc-tag">Multi-Cost Allocation</span>
+        </div>
+        <div class="formula-box">Product Cost = Purchase Price + Transport + Packaging + Storage + Marketing + Damage Reserve + Other Costs</div>
+        <div class="code-snippet">double calculateProductCost({required double purchasePrice, required double transportCost, required double packagingCost, required double storageCost, required double marketingCost, required double damageCost, required double otherCosts}) => _roundCurrency(purchasePrice + transportCost + packagingCost + storageCost + marketingCost + damageCost + otherCosts);</div>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">2.2. Markup Selling Price from Target Margin %</div>
+            <span class="calc-tag">Pricing Strategy</span>
+        </div>
+        <div class="formula-box">Selling Price = Product Cost × (1 + (Target Profit Margin % / 100))</div>
+        <div class="code-snippet">double calculateSellingPrice({required double productCost, required double profitMargin}) => _roundCurrency(productCost + (productCost * (profitMargin / 100)));</div>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">2.3. Weight-Based Transport Overhead Rate</div>
+            <span class="calc-tag">Logistics Weight Pricing</span>
+        </div>
+        <div class="formula-box">Per-Gram Price = Per-Kg Logistics Rate / 1000
+Unit Transport Cost = Per-Gram Price × Product Weight (Grams)</div>
+    </div>
+
+    <!-- Section 3 -->
+    <div class="section-title">
+        <span class="section-badge">3</span>
+        <span>Point-of-Sale (POS), Split-Payments & Invoice Settlement</span>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">3.1. POS Cart Totals & Net Payable Invoice</div>
+            <span class="calc-tag">Checkout Flow</span>
+        </div>
+        <div class="formula-box">Item Subtotal = Unit Selling Price × Quantity
+Invoice Subtotal = ∑(Item Subtotals)
+Grand Total (Net Payable) = Invoice Subtotal - Flat Discount</div>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">3.2. Multi-Payment Split, Customer Due ("Baki") & Change</div>
+            <span class="calc-tag">Split Settlement</span>
+        </div>
+        <div class="formula-box">Total Paid = Cash Paid + Card Paid + MFS Paid
+IF Total Paid < Grand Total:
+    Customer Due (Baki) = Grand Total - Total Paid
+    Cashier Change = 0.00
+ELSE:
+    Customer Due (Baki) = 0.00
+    Cashier Change = Total Paid - Grand Total</div>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">3.3. Realized Gross Profit on POS Transaction</div>
+            <span class="calc-tag">Sales Profit</span>
+        </div>
+        <div class="formula-box">Invoice Gross Profit = [ ∑(Item Selling Price - Item Net Purchase Cost) ] - Invoice Discount</div>
+    </div>
+
+    <!-- Section 4 -->
+    <div class="section-title">
+        <span class="section-badge">4</span>
+        <span>Sales Returns, Refund Adjustments & Inventory Write-Offs</span>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">4.1. Sales Return Refund & Debt Reconciliation</div>
+            <span class="calc-tag">Returns & Exchanges</span>
+        </div>
+        <div class="formula-box">Gross Refund Value = Unit Sale Price × Returned Quantity
+Due Reduction Amount = MIN(Gross Refund Value, Customer Outstanding Due Balance)
+Cash Refund Paid = Gross Refund Value - Due Reduction Amount</div>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">4.2. Damaged Inventory Write-Off Valuation</div>
+            <span class="calc-tag">Shrinkage & Loss</span>
+        </div>
+        <div class="formula-box">Total Damage Loss = ∑(Damaged Handsets × Net Purchase Cost) + ∑(Damaged Gadget Qty × Unit Cost)</div>
+    </div>
+
+    <!-- Section 5 -->
+    <div class="section-title">
+        <span class="section-badge">5</span>
+        <span>Customer Due ("Baki") Ledger Accounting</span>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">5.1. Customer Balance Update on Partial Collection</div>
+            <span class="calc-tag">Receivables Ledger</span>
+        </div>
+        <div class="formula-box">Remaining Customer Due = Current Total Due - Installment Payment Received
+Total Market Receivables = ∑(All Customer Outstanding Due Balances)</div>
+    </div>
+
+    <!-- Section 6 -->
+    <div class="section-title">
+        <span class="section-badge">6</span>
+        <span>Employee Payroll, Salary Advances & Deductions</span>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">6.1. Net Monthly Payable Salary</div>
+            <span class="calc-tag">Payroll Processing</span>
+        </div>
+        <div class="formula-box">Net Payable Salary = (Base Salary + Previous Due Paid + Advance Repaid + Bonus) - Deductions</div>
+        <div class="code-snippet">double get totalDeduction => (amount + duePaid + advance + bonus) - deductions;</div>
+    </div>
+
+    <!-- Section 7 -->
+    <div class="section-title">
+        <span class="section-badge">7</span>
+        <span>Capital, Investment & Total Business Valuation</span>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">7.1. Available Liquid Capital</div>
+            <span class="calc-tag">Cash Flow Balance</span>
+        </div>
+        <div class="formula-box">Available Liquid Capital = Initial Capital + Capital Recovered - Capital Invested</div>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">7.2. Total Enterprise Capital Valuation (Total Business Assets)</div>
+            <span class="calc-tag">Balance Sheet Equity</span>
+        </div>
+        <div class="formula-box highlight">Total Business Capital = Mobile Stock Value + Gadget Stock Value + Available Capital + Total Market Baki</div>
+        <div class="code-snippet">double get totalCapital => mobileStockValue + gadgetStockValue + availableCapital + totalBaki;</div>
+    </div>
+
+    <!-- Section 8 -->
+    <div class="section-title">
+        <span class="section-badge">8</span>
+        <span>Executive Financial Intelligence & Net Profit/Loss Engine</span>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">8.1. Consolidated True Net Profit Engine</div>
+            <span class="calc-tag">P&L Master Engine</span>
+        </div>
+        <div class="formula-box highlight">Realized Gross Profit = Total Sales Revenue - Cost of Goods Sold (COGS) - Discounts
+Operating Expenses = ∑(Shop Expenses: Rent, Utility, Tea, Transport, Misc) + ∑(Salaries Paid)
+True Net Operating Profit = Gross Profit - Gross Loss - Operating Expenses - Damaged Stock Loss</div>
+        <div class="code-snippet">double get netProfit => totalProfit - totalLoss - totalSalaryPaid - totalOtherExpenses;</div>
+    </div>
+
+    <div class="calc-card">
+        <div class="calc-header">
+            <div class="calc-title">8.2. Business Financial Health Ratios</div>
+            <span class="calc-tag">Performance KPIs</span>
+        </div>
+        <div class="formula-box">Gross Profit Margin (%) = (Realized Gross Profit / Total Sales Revenue) × 100
+Net Profit Margin (%) = (True Net Operating Profit / Total Sales Revenue) × 100
+Profit Margin on Cost (%) = ((Selling Price - Net Landed Cost) / Net Landed Cost) × 100</div>
+    </div>
+
+    <!-- Summary Reference Table -->
+    <div class="section-title">
+        <span class="section-badge">★</span>
+        <span>Executive Calculation Reference Summary Table</span>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 25%;">Domain</th>
+                <th style="width: 32%;">Metric Name</th>
+                <th style="width: 43%;">Formula Definition</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="font-mono text-bold text-primary">Mobile Inventory</td>
+                <td>Dynamic Landed Cost</td>
+                <td class="font-mono">Purchase Rate + (Transport Cost / Quantity)</td>
+            </tr>
+            <tr>
+                <td class="font-mono text-bold text-primary">Gadget Inventory</td>
+                <td>Target Selling Price</td>
+                <td class="font-mono">Product Cost × (1 + Margin% / 100)</td>
+            </tr>
+            <tr>
+                <td class="font-mono text-bold text-primary">POS Terminal</td>
+                <td>Customer Due (Baki)</td>
+                <td class="font-mono">Grand Total - (Cash + Card + MFS Paid)</td>
+            </tr>
+            <tr>
+                <td class="font-mono text-bold text-primary">Customer Ledger</td>
+                <td>Remaining Due</td>
+                <td class="font-mono">Total Outstanding Due - Payment Collected</td>
+            </tr>
+            <tr>
+                <td class="font-mono text-bold text-primary">Payroll</td>
+                <td>Net Payable Salary</td>
+                <td class="font-mono">Base Salary + Bonus - Advances - Deductions</td>
+            </tr>
+            <tr>
+                <td class="font-mono text-bold text-primary">Capital / Assets</td>
+                <td>Total Business Worth</td>
+                <td class="font-mono">Stock Value + Available Cash + Total Baki</td>
+            </tr>
+            <tr>
+                <td class="font-mono text-bold text-success">P&L Master Engine</td>
+                <td class="text-bold text-success">True Net Profit</td>
+                <td class="font-mono text-bold text-success">Gross Margin - Expenses - Salaries - Losses</td>
+            </tr>
+            <tr>
+                <td class="font-mono text-bold text-success">BI KPI</td>
+                <td>Net Margin (%)</td>
+                <td class="font-mono">(True Net Profit / Total Revenue) × 100</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="footer-note">
+        Smart Buy Online (I-Buzz BD Management) • Software Development Project IV (CSE 400) • Bangladesh University of Business and Technology (BUBT)
+    </div>
+
+</body>
+</html>

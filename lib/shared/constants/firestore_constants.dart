@@ -1,4 +1,4 @@
-/// Firestore collection and field constants
+﻿/// Firestore collection and field constants
 class FirestoreConstants {
   FirestoreConstants._();
 
@@ -14,6 +14,8 @@ class FirestoreConstants {
   static const String salary = 'salary';
   static const String expenses = 'expenses';
   static const String employees = 'employees';
+  static const String returns = 'returns';
+  static const String damageEvents = 'damage_events';
 
   // Common Fields
   static const String id = 'id';
@@ -38,6 +40,11 @@ class FirestoreConstants {
   static const String profit = 'profit';
   static const String status = 'status';
   static const String soldDate = 'soldDate';
+  static const String damageReason = 'damageReason';
+  static const String isReturned = 'isReturned';
+  static const String returnCount = 'returnCount';
+  static const String returnReason = 'returnReason';
+  static const String returnedAt = 'returnedAt';
 
   // Gadget Stock Fields
   static const String productCode = 'productCode';
@@ -52,6 +59,8 @@ class FirestoreConstants {
   static const String productCost = 'productCost';
   static const String profitMargin = 'profitMargin';
   static const String stockStatus = 'stockStatus';
+  static const String damagedQuantity = 'damagedQuantity';
+  static const String damageValue = 'damageValue';
 
   // Transport Fields
   static const String perKgPrice = 'perKgPrice';
@@ -68,6 +77,9 @@ class FirestoreConstants {
   static const String paymentStatus = 'paymentStatus';
   static const String paidAmount = 'paidAmount';
   static const String dueAmount = 'dueAmount';
+  static const String returnedQuantity = 'returnedQuantity';
+  static const String returnedAmount = 'returnedAmount';
+  static const String returnStatus = 'returnStatus';
 
   // Customer Fields
   static const String name = 'name';

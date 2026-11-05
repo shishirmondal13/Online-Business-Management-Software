@@ -11,8 +11,13 @@ class MobileStock extends BaseModel {
   final double netPurchasePrice;
   final double sellingPrice;
   final double profit;
-  final String status; // 'sold' or 'unsold'
+  final String status; // 'sold', 'unsold', or 'damaged'
   final DateTime? soldDate;
+  final String damageReason;
+  final bool isReturned;
+  final int returnCount;
+  final String returnReason;
+  final DateTime? returnedAt;
 
   const MobileStock({
     required super.id,
@@ -29,6 +34,11 @@ class MobileStock extends BaseModel {
     required this.profit,
     required this.status,
     this.soldDate,
+    this.damageReason = '',
+    this.isReturned = false,
+    this.returnCount = 0,
+    this.returnReason = '',
+    this.returnedAt,
   });
 
   factory MobileStock.fromMap(Map<String, dynamic> map, String id) {
@@ -45,6 +55,11 @@ class MobileStock extends BaseModel {
       profit: (map['profit'] ?? 0).toDouble(),
       status: map['status'] ?? 'unsold',
       soldDate: BaseModel.parseDateTime(map['soldDate']),
+      damageReason: map['damageReason'] ?? '',
+      isReturned: map['isReturned'] ?? false,
+      returnCount: (map['returnCount'] ?? 0).toInt(),
+      returnReason: map['returnReason'] ?? '',
+      returnedAt: BaseModel.parseDateTime(map['returnedAt']),
       createdAt: BaseModel.timestampToDate(map['createdAt']),
       updatedAt: BaseModel.timestampToDate(map['updatedAt']),
     );
@@ -71,6 +86,13 @@ class MobileStock extends BaseModel {
       'soldDate': soldDate != null
           ? BaseModel.dateToTimestamp(soldDate!)
           : null,
+      'damageReason': damageReason,
+      'isReturned': isReturned,
+      'returnCount': returnCount,
+      'returnReason': returnReason,
+      'returnedAt': returnedAt != null
+          ? BaseModel.dateToTimestamp(returnedAt!)
+          : null,
       'createdAt': BaseModel.dateToTimestamp(createdAt),
       'updatedAt': BaseModel.dateToTimestamp(updatedAt),
     };
@@ -91,6 +113,11 @@ class MobileStock extends BaseModel {
     DateTime? soldDate,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? damageReason,
+    bool? isReturned,
+    int? returnCount,
+    String? returnReason,
+    DateTime? returnedAt,
   }) {
     return MobileStock(
       id: id ?? this.id,
@@ -107,11 +134,26 @@ class MobileStock extends BaseModel {
       soldDate: soldDate ?? this.soldDate,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      damageReason: damageReason ?? this.damageReason,
+      isReturned: isReturned ?? this.isReturned,
+      returnCount: returnCount ?? this.returnCount,
+      returnReason: returnReason ?? this.returnReason,
+      returnedAt: returnedAt ?? this.returnedAt,
     );
   }
 
   bool get isSold => status == 'sold';
   bool get isUnsold => status == 'unsold';
+  bool get isDamaged => status == 'damaged';
+
+  /// Helper string for UI display of return state
+  String get returnLabel {
+    if (!isReturned && returnCount == 0) return '';
+    if (returnCount > 1) {
+      return 'Returned from customer ($returnCount times)';
+    }
+    return 'Returned from customer once';
+  }
 
   /// Create with auto-calculated fields
   factory MobileStock.create({
@@ -123,6 +165,10 @@ class MobileStock extends BaseModel {
     required double transportCost,
     required double sellingPrice,
     String status = 'unsold',
+    bool isReturned = false,
+    int returnCount = 0,
+    String returnReason = '',
+    DateTime? returnedAt,
   }) {
     final now = DateTime.now();
     final netPurchasePrice = purchaseRate + transportCost;
@@ -140,6 +186,10 @@ class MobileStock extends BaseModel {
       sellingPrice: sellingPrice,
       profit: profit,
       status: status,
+      isReturned: isReturned,
+      returnCount: returnCount,
+      returnReason: returnReason,
+      returnedAt: returnedAt,
       createdAt: now,
       updatedAt: now,
     );

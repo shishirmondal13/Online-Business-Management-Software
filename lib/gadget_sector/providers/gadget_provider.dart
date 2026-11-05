@@ -13,12 +13,12 @@ final gadgetStockListProvider = StreamProvider<List<GadgetStock>>((ref) {
 
   return FirebaseFirestore.instance
       .collection(FirestoreConstants.gadgetStock)
-      .orderBy('date', descending: true)
       .snapshots()
       .map((snapshot) {
         final list = snapshot.docs
             .map((doc) => GadgetStock.fromFirestore(doc))
             .toList();
+        list.sort((a, b) => b.date.compareTo(a.date));
         return list;
       });
 });
@@ -50,6 +50,17 @@ final filteredGadgetStockProvider =
       });
     });
 
+/// Returned gadget stock list (items returned from customer)
+final returnedGadgetStockProvider =
+    Provider<AsyncValue<List<GadgetStock>>>((ref) {
+      final stockList = ref.watch(gadgetStockListProvider);
+      return stockList.whenData((list) {
+        return list
+            .where((item) => item.isReturned || item.returnedQuantity > 0)
+            .toList();
+      });
+    });
+
 /// Single gadget stock provider
 final gadgetStockProvider = FutureProvider.family<GadgetStock?, String>((
   ref,
@@ -78,14 +89,13 @@ class GadgetStockService {
     // 1. Verify uniqueness for the product code
     final existing = await _firestore
         .collection(FirestoreConstants.gadgetStock)
+        .where(FirestoreConstants.userId, isEqualTo: stock.userId)
         .where(FirestoreConstants.productCode, isEqualTo: stock.productCode)
         .limit(1)
         .get();
 
     if (existing.docs.isNotEmpty) {
-      throw Exception(
-        'Product code ${stock.productCode} already exists.',
-      );
+      throw Exception('Product code ${stock.productCode} already exists.');
     }
 
     final id = _uuid.v4();
@@ -104,6 +114,7 @@ class GadgetStockService {
     // Check product code uniqueness (excluding current document) for this user
     final existing = await _firestore
         .collection(FirestoreConstants.gadgetStock)
+        .where(FirestoreConstants.userId, isEqualTo: stock.userId)
         .where(FirestoreConstants.productCode, isEqualTo: stock.productCode)
         .limit(2)
         .get();
@@ -123,16 +134,25 @@ class GadgetStockService {
 
   /// Delete gadget stock
   Future<void> deleteGadgetStock(String id) async {
+    final references = await _firestore
+        .collection(FirestoreConstants.sales)
+        .where(FirestoreConstants.productId, isEqualTo: id)
+        .limit(1)
+        .get();
+    if (references.docs.isNotEmpty) {
+      throw StateError('Cannot delete stock referenced by a sale.');
+    }
     await _firestore
         .collection(FirestoreConstants.gadgetStock)
         .doc(id)
         .delete();
   }
 
-
-
   /// Update quantity
   Future<void> updateQuantity(String id, int newQuantity) async {
+    if (newQuantity < 0) {
+      throw ArgumentError('Quantity cannot be negative.');
+    }
     String stockStatus = 'in_stock';
     if (newQuantity == 0) {
       stockStatus = 'out_of_stock';
@@ -155,6 +175,7 @@ class GadgetStockService {
   }) async {
     final query = await _firestore
         .collection(FirestoreConstants.gadgetStock)
+        .where(FirestoreConstants.userId, isEqualTo: userId)
         .where(FirestoreConstants.productCode, isEqualTo: code)
         .limit(1)
         .get();
